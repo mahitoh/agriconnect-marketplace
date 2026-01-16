@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import FarmerDashboard from './pages/FarmerDashboard';
 import ConsumerDashboard from './pages/ConsumerDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import Cart from './pages/Cart';
 import './styles/global.css';
 
 const App = () => {
@@ -24,6 +25,7 @@ const App = () => {
         <Route path="/farmer/dashboard" element={<FarmerDashboard />} />
         <Route path="/consumer/dashboard" element={<ConsumerDashboard />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/cart" element={<Cart />} />
       </Routes>
     </BrowserRouter>
   );
