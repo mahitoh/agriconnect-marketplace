@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { GiWheat } from 'react-icons/gi';
 import { FiGlobe, FiShoppingCart, FiMenu, FiX } from 'react-icons/fi';
 
@@ -9,7 +9,6 @@ const Navbar = () => {
   const [showHeader, setShowHeader] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const location = useLocation();
-  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -92,15 +91,10 @@ const Navbar = () => {
             <FiGlobe />
             <span style={{ marginLeft: 4, fontSize: 13 }}>EN</span>
           </button>
-          <button 
-            className="icon-btn" 
-            type="button" 
-            aria-label="Shopping Cart"
-            onClick={() => navigate('/cart')}
-          >
+          <Link to="/cart" className="icon-btn" aria-label="Shopping Cart">
             <FiShoppingCart />
             <span className="cart-badge">3</span>
-          </button>
+          </Link>
           <Link
             to="/login"
             className={`btn btn-outline ${isActive('/login') ? 'active' : ''}`}
