@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
+import GoogleLogo from '../assets/Google.png';
+import FacebookLogo from '../assets/facebook.png';
 import { GiWheat } from 'react-icons/gi';
 import {
   FaCheck,
@@ -9,9 +11,7 @@ import {
   FaMobileAlt,
   FaTruck,
   FaEye,
-  FaEyeSlash,
-  FaGoogle,
-  FaFacebookF
+  FaEyeSlash
 } from 'react-icons/fa';
 
 const Login = () => {
@@ -182,13 +182,13 @@ const Login = () => {
               <div className="auth-social-grid">
                 <button type="button" className="auth-social-btn">
                   <span className="auth-social-icon">
-                    <FaGoogle />
+                    <img src={GoogleLogo} alt="Google" style={{ width: '20px', height: '20px' }} />
                   </span>
                   Google
                 </button>
                 <button type="button" className="auth-social-btn">
                   <span className="auth-social-icon">
-                    <FaFacebookF />
+                    <img src={FacebookLogo} alt="Facebook" style={{ width: '20px', height: '20px' }} />
                   </span>
                   Facebook
                 </button>

@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
+import GoogleLogo from '../assets/Google.png';
+import FacebookLogo from '../assets/facebook.png';
 import { GiWheat } from 'react-icons/gi';
 import {
   FaCheck,
@@ -11,15 +14,17 @@ import {
   FaShoppingBag,
   FaTractor,
   FaEye,
-  FaEyeSlash,
-  FaGoogle,
-  FaFacebookF
+  FaEyeSlash
 } from 'react-icons/fa';
 
 const Register = () => {
+  const navigate = useNavigate();
+  const { signup, loading } = useAuth();
   const [userType, setUserType] = useState('buyer');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -37,12 +42,91 @@ const Register = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+    setError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // UI-only for now
-    // console.log('Register form submitted', { userType, formData });
+    setError('');
+    setSuccess('');
+
+    // Validation
+    if (!formData.fullName || !formData.email || !formData.phone || !formData.password) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    if (!formData.acceptTerms) {
+      setError('You must accept the terms and conditions');
+      return;
+    }
+
+    try {
+      const response = await signup({
+        email: formData.email,
+        password: formData.password,
+        fullName: formData.fullName,
+        phone: formData.phone,
+        role: userType === 'buyer' ? 'customer' : 'farmer'
+      });
+
+      if (response.success) {
+        setSuccess('Registration successful! Please verify your email address.');
+        // Redirect to login after 2 seconds
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+      } else {
+        setError(response.message || 'Registration failed');
+      }
+    } catch (err) {
+      setError(err.message || 'An error occurred during registration');
+    }
+  };
+
+  const handleGoogleSignUp = async () => {
+    setError('');
+    try {
+      console.log('🔐 Attempting Google sign-up...');
+      
+      // First check if backend is running
+      const healthCheck = await fetch('http://localhost:5000/api/oauth/health');
+      if (!healthCheck.ok) {
+        setError('❌ Backend server is not running. Make sure to run "npm run dev" in the backend folder.');
+        return;
+      }
+      
+      const oauthResponse = await fetch('http://localhost:5000/api/oauth/google');
+      const data = await oauthResponse.json();
+      
+      console.log('OAuth Response:', data);
+      
+      if (!oauthResponse.ok) {
+        const errorMsg = data.details || data.message || 'Unknown error';
+        setError(`Google Sign-Up Error: ${errorMsg}`);
+        return;
+      }
+      
+      if (data.success && data.data.url) {
+        // Redirect to Google OAuth
+        window.location.href = data.data.url;
+      } else {
+        setError(data.message || 'Failed to initiate Google sign-up');
+      }
+    } catch (err) {
+      console.error('Google sign-up error:', err);
+      setError(`❌ Backend Error: ${err.message}. Make sure backend is running on http://localhost:5000`);
+    }
   };
 
   return (
@@ -135,6 +219,18 @@ const Register = () => {
             </div>
 
             <form className="auth-form" onSubmit={handleSubmit}>
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                  {error}
+                </div>
+              )}
+
+              {success && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
+                  {success}
+                </div>
+              )}
+
               {/* User type selector */}
               <div className="auth-user-type-grid">
                 <button
@@ -314,8 +410,8 @@ const Register = () => {
                 </label>
               </div>
 
-              <button type="submit" className="auth-submit-btn">
-                Create Account
+              <button type="submit" className="auth-submit-btn" disabled={loading}>
+                {loading ? 'Creating Account...' : 'Create Account'}
               </button>
 
               <div className="auth-divider">
@@ -325,15 +421,24 @@ const Register = () => {
               </div>
 
               <div className="auth-social-grid">
-                <button type="button" className="auth-social-btn">
+                <button 
+                  type="button" 
+                  className="auth-social-btn"
+                  onClick={handleGoogleSignUp}
+                  disabled={loading}
+                >
                   <span className="auth-social-icon">
-                    <FaGoogle />
+                    <img src={GoogleLogo} alt="Google" style={{ width: '20px', height: '20px' }} />
                   </span>
                   Google
                 </button>
-                <button type="button" className="auth-social-btn">
+                <button 
+                  type="button" 
+                  className="auth-social-btn"
+                  disabled={loading}
+                >
                   <span className="auth-social-icon">
-                    <FaFacebookF />
+                    <img src={FacebookLogo} alt="Facebook" style={{ width: '20px', height: '20px' }} />
                   </span>
                   Facebook
                 </button>

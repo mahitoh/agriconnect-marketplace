@@ -819,7 +819,8 @@ body {
 }
 
 .form-input {
-  padding: 10px 14px;
+  width: 100%;
+  padding: 12px 14px;
   border-radius: 8px;
   border: 1px solid #d1d5db;
   font-size: 14px;
