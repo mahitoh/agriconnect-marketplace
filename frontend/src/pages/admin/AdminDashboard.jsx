@@ -1,8 +1,8 @@
 import React from 'react';
 import { FaUsers, FaTractor, FaShoppingCart, FaMoneyBillWave, FaChartLine } from 'react-icons/fa';
-import Navbar from '../components/layout/Navbar';
-import Footer from '../components/layout/Footer';
-import { adminSummary, adminRecentActivity, adminTopFarmers } from '../data/dashboardMock';
+import Navbar from '../../components/layout/Navbar';
+import Footer from '../../components/layout/Footer';
+import { adminSummary, adminRecentActivity, adminTopFarmers } from '../../data/dashboardMock';
 
 const AdminDashboard = () => {
   return (

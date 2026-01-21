@@ -13,8 +13,8 @@ import {
   FaUserCircle,
   FaQuestionCircle
 } from 'react-icons/fa';
-import Navbar from '../components/layout/Navbar';
-import Footer from '../components/layout/Footer';
+import Navbar from '../../components/layout/Navbar';
+import Footer from '../../components/layout/Footer';
 import {
   farmerSummary,
   farmerRecentOrders,
@@ -24,7 +24,7 @@ import {
   farmerInventory,
   farmerNotifications,
   farmerSupportTickets
-} from '../data/dashboardMock';
+} from '../../data/dashboardMock';
 
 const SECTIONS = {
   DASHBOARD: 'dashboard',
