@@ -1,7 +1,7 @@
 import React from 'react';
 import { FaStar, FaMapMarkerAlt } from 'react-icons/fa';
 
-const ProductCard = ({ product }) => {
+const ProductCard = ({ product, onAddToCart }) => {
   return (
     <div className="product-card">
       <div className="product-image-container">
@@ -28,7 +28,11 @@ const ProductCard = ({ product }) => {
               <span className="price-old">{product.oldPrice}</span>
             )}
           </div>
-          <button className="btn-add" type="button">
+          <button 
+            className="btn-add" 
+            type="button"
+            onClick={onAddToCart}
+          >
             Add
           </button>
         </div>

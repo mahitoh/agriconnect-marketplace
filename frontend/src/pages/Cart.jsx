@@ -5,41 +5,15 @@ import { FaMobileAlt, FaMoneyBillWave } from 'react-icons/fa';
 import { BsCashCoin } from 'react-icons/bs';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
+import { useCart } from '../context/CartContext';
 
 const Cart = () => {
   const [currentStep, setCurrentStep] = useState('cart');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   
-  const [cartItems, setCartItems] = useState([
-    {
-      id: 1,
-      name: 'Organic Vegetable Basket',
-      farmer: 'Ferme Mballa',
-      location: 'Yaoundé, Centre',
-      price: 15000,
-      quantity: 2,
-      image: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=200&h=200&fit=crop'
-    },
-    {
-      id: 2,
-      name: 'Farm Fresh Eggs (30)',
-      farmer: 'Poulailler Fotso',
-      location: 'Bafoussam, Ouest',
-      price: 4500,
-      quantity: 1,
-      image: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=200&h=200&fit=crop'
-    },
-    {
-      id: 3,
-      name: 'Fresh Tomatoes (5kg)',
-      farmer: 'Agro Farm Douala',
-      location: 'Douala, Littoral',
-      price: 3500,
-      quantity: 3,
-      image: 'https://images.unsplash.com/photo-1546470427-227c7369a9b0?w=200&h=200&fit=crop'
-    }
-  ]);
+  // Use cart context instead of local state
+  const { cartItems, updateQuantity, removeFromCart, getCartTotal, clearCart } = useCart();
 
   const [deliveryInfo, setDeliveryInfo] = useState({
     fullName: '',
@@ -49,20 +23,16 @@ const Cart = () => {
     region: ''
   });
 
-  const updateQuantity = (id, change) => {
-    setCartItems(items =>
-      items.map(item =>
-        item.id === id ? { ...item, quantity: Math.max(1, item.quantity + change) } : item
-      )
-    );
+  const handleUpdateQuantity = (id, change) => {
+    updateQuantity(id, change);
   };
 
-  const removeItem = (id) => {
-    setCartItems(items => items.filter(item => item.id !== id));
+  const handleRemoveItem = (id) => {
+    removeFromCart(id);
   };
 
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryFee = 2000;
+  const subtotal = getCartTotal();
+  const deliveryFee = cartItems.length > 0 ? 2000 : 0;
   const total = subtotal + deliveryFee;
 
   const handleDeliveryChange = (e) => {
@@ -342,7 +312,7 @@ const Cart = () => {
                           overflow: 'hidden'
                         }}>
                           <button 
-                            onClick={() => updateQuantity(item.id, -1)}
+                            onClick={() => handleUpdateQuantity(item.id, -1)}
                             style={{ 
                               padding: '10px 14px', 
                               border: 'none', 
@@ -363,7 +333,7 @@ const Cart = () => {
                             {item.quantity}
                           </span>
                           <button 
-                            onClick={() => updateQuantity(item.id, 1)}
+                            onClick={() => handleUpdateQuantity(item.id, 1)}
                             style={{ 
                               padding: '10px 14px', 
                               border: 'none', 
@@ -379,7 +349,7 @@ const Cart = () => {
                         </div>
                         
                         <button 
-                          onClick={() => removeItem(item.id)}
+                          onClick={() => handleRemoveItem(item.id)}
                           style={{ 
                             background: 'none', 
                             border: 'none', 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   FaUserFriends,
   FaBoxOpen,
@@ -17,8 +18,24 @@ import Footer from '../components/layout/Footer';
 import ProductCard from '../components/ProductCard';
 import FarmerCard from '../components/FarmerCard';
 import { stats, features, products, steps, farmers } from '../data/mockData';
+import { useCart } from '../context/CartContext';
 
 const Home = () => {
+  const { addToCart } = useCart();
+
+  const handleAddToCart = (product) => {
+    const cartProduct = {
+      id: product.id,
+      name: product.name,
+      price: parseInt(product.price.replace(/[^\d]/g, '')),
+      image: product.image,
+      category: product.badge,
+      farmer: product.farmer,
+      location: product.location
+    };
+    addToCart(cartProduct);
+  };
+
   return (
     <div className="min-h-screen bg-[#f5f5f0]">
       <Navbar />
@@ -101,14 +118,18 @@ const Home = () => {
 
         <div className="products-grid">
           {products.slice(0, 3).map((product) => (
-            <ProductCard key={product.id} product={product} />
+            <ProductCard 
+              key={product.id} 
+              product={product} 
+              onAddToCart={() => handleAddToCart(product)}
+            />
           ))}
         </div>
 
         <div className="view-all-container">
-          <button className="btn btn-primary btn-large" type="button">
+          <Link to="/marketplace" className="btn btn-primary btn-large" style={{ textDecoration: 'none' }}>
             View All Products →
-          </button>
+          </Link>
         </div>
       </section>
 
@@ -154,9 +175,9 @@ const Home = () => {
         </div>
 
         <div className="view-all-container">
-          <button className="btn btn-outline btn-large" type="button">
+          <Link to="/farmers" className="btn btn-outline btn-large" style={{ textDecoration: 'none' }}>
             View All Farmers →
-          </button>
+          </Link>
         </div>
       </section>
 

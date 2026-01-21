@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { CartProvider } from './context/CartContext';
+import { FavoritesProvider } from './context/FavoritesContext';
 import Home from './pages/Home';
 import Marketplace from './pages/Marketplace';
 import Farmers from './pages/Farmers';
@@ -18,22 +20,27 @@ import Error404Page from './pages/error/Error404Page';
 const App = () => {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/marketplace" element={<Marketplace />} />
-          <Route path="/farmers" element={<Farmers />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/farmer/dashboard" element={<FarmerDashboard />} />
-          <Route path="/consumer/dashboard" element={<ConsumerDashboard />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/FarmerProfile" element={<FarmerProfile/>} />
-          <Route path="/Error404Page" element={<Error404Page/>} />
-        </Routes>
-      </BrowserRouter>
+      <CartProvider>
+        <FavoritesProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/marketplace" element={<Marketplace />} />
+              <Route path="/farmers" element={<Farmers />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/farmer/dashboard" element={<FarmerDashboard />} />
+              <Route path="/consumer/dashboard" element={<ConsumerDashboard />} />
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/cart" element={<Cart />} />
+              <Route path="/farmers/:id" element={<FarmerProfile />} />
+              <Route path="/404" element={<Error404Page />} />
+              <Route path="*" element={<Error404Page />} />
+            </Routes>
+          </BrowserRouter>
+        </FavoritesProvider>
+      </CartProvider>
     </AuthProvider>
   );
 };

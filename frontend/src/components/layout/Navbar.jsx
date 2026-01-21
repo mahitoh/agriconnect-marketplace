@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { GiWheat } from 'react-icons/gi';
 import { FiGlobe, FiShoppingCart, FiMenu, FiX } from 'react-icons/fi';
+import { useCart } from '../../context/CartContext';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -9,6 +10,9 @@ const Navbar = () => {
   const [showHeader, setShowHeader] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const location = useLocation();
+  const { getCartCount } = useCart();
+  
+  const cartCount = getCartCount();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -93,7 +97,7 @@ const Navbar = () => {
           </button>
           <Link to="/cart" className="icon-btn" aria-label="Shopping Cart">
             <FiShoppingCart />
-            <span className="cart-badge">3</span>
+            {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
           </Link>
           <Link
             to="/login"

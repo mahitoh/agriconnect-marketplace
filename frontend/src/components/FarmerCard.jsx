@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { FaStar, FaMapMarkerAlt, FaClock, FaBox } from 'react-icons/fa';
 
 const FarmerCard = ({ farmer }) => {
@@ -34,12 +35,13 @@ const FarmerCard = ({ farmer }) => {
             {farmer.products}
           </span>
         </div>
-        <button
+        <Link
+          to={`/farmers/${farmer.id}`}
           className={`btn btn-${farmer.btnStyle} btn-view-profile`}
-          type="button"
+          style={{ textDecoration: 'none', display: 'inline-block', textAlign: 'center' }}
         >
           View Profile
-        </button>
+        </Link>
       </div>
     </div>
   );
