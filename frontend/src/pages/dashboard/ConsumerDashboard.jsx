@@ -1,267 +1,353 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  FaShoppingBag,
+  FaHeart,
+  FaUserCircle,
+  FaMapMarkerAlt,
+  FaCreditCard,
+  FaHistory,
+  FaSignOutAlt,
+  FaStar,
+  FaSearch,
+  FaFilter,
+  FaChevronRight,
+  FaHome,
+  FaEdit,
+  FaTrash,
+  FaPlus
+} from 'react-icons/fa';
+import Navbar from '../../components/layout/Navbar';
+import Footer from '../../components/layout/Footer';
+import Input from '../../components/ui/input';
+import { consumerSummary, consumerRecentOrders, consumerSuggestions } from '../../data/dashboardMock';
+
+const SECTIONS = {
+  DASHBOARD: 'dashboard',
+  ORDERS: 'orders',
+  WISHLIST: 'wishlist',
+  PROFILE: 'profile',
+  ADDRESSES: 'addresses'
+};
 
 const ConsumerDashboard = () => {
-  const [activeSection, setActiveSection] = useState('overview');
+  const [activeSection, setActiveSection] = useState(SECTIONS.DASHBOARD);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  const consumerData = {
-    name: 'Marie Nguema',
-    email: 'marie.nguema@email.cm',
-    phone: '+237 677 123 456',
-    location: 'Douala, Littoral',
-    memberSince: 'Feb 2024',
-    avatar: 'MN',
-    totalSpent: '450,000 FCFA',
-    ordersCount: 23,
-    favouriteFarmers: 5
+  // Local Wishlist Data
+  const wishlistItems = [
+    { id: 1, name: 'Organic Tomatoes', farmer: 'Ferme Mballa', price: '2,500 FCFA', image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200&h=200&fit=crop', inStock: true },
+    { id: 2, name: 'Fresh Honey', farmer: 'Beekeeping Co.', price: '5,000 FCFA', image: 'https://images.unsplash.com/photo-1587049352846-4a222e784502?w=200&h=200&fit=crop', inStock: true },
+    { id: 3, name: 'Sweet Potatoes', farmer: 'Root Farms', price: '3,000 FCFA', image: 'https://images.unsplash.com/photo-1596097635121-14b63b7a7843?w=200&h=200&fit=crop', inStock: false }
+  ];
+
+  // Dummy Addresses
+  const addresses = [
+    { id: 1, label: 'Home', name: 'Marie Nguema', phone: '+237 677 123 456', address: '123 Main St, Akwa', city: 'Douala', region: 'Littoral', isDefault: true },
+    { id: 2, label: 'Office', name: 'Marie Nguema', phone: '+237 677 123 456', address: 'Business Park, Bonanjo', city: 'Douala', region: 'Littoral', isDefault: false }
+  ];
+
+  const fadeIn = {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -20 },
+    transition: { duration: 0.3 }
   };
 
-  const recentOrders = [
-    { id: 'FL-847293', farmer: 'Ferme Mballa', items: 'Vegetable Basket, Eggs', total: '32,000 FCFA', status: 'delivered', date: '2026-01-15', image: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=100&h=100&fit=crop' },
-    { id: 'FL-847290', farmer: 'Poulailler Fotso', items: 'Farm Eggs (30)', total: '18,500 FCFA', status: 'shipped', date: '2026-01-18', image: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=100&h=100&fit=crop' },
-    { id: 'FL-847287', farmer: 'Les Jardins', items: 'Fresh Fruits', total: '25,000 FCFA', status: 'processing', date: '2026-01-19', image: 'https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=100&h=100&fit=crop' },
-    { id: 'FL-847285', farmer: 'Ferme Bio Mballa', items: 'Organic Vegetables', total: '45,000 FCFA', status: 'pending', date: '2026-01-20', image: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=100&h=100&fit=crop' }
-  ];
+  const SidebarItem = ({ id, icon, label }) => (
+    <button
+      onClick={() => setActiveSection(id)}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${activeSection === id
+          ? 'bg-[var(--primary-500)] text-white shadow-lg shadow-[var(--primary-500)]/30'
+          : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--primary-600)]'
+        }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
 
-  const suggestions = [
-    { id: 1, name: 'Organic Tomatoes (5kg)', farmer: 'Ferme Mballa', price: '8,500 FCFA', rating: 4.8, image: 'https://images.unsplash.com/photo-1546094096-0df4bcaaa337?w=200&h=200&fit=crop' },
-    { id: 2, name: 'Fresh Farm Eggs (30)', farmer: 'Poulailler Fotso', price: '4,500 FCFA', rating: 4.9, image: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=200&h=200&fit=crop' },
-    { id: 3, name: 'Mixed Fruit Basket', farmer: 'Les Jardins', price: '12,000 FCFA', rating: 4.7, image: 'https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=200&h=200&fit=crop' },
-    { id: 4, name: 'Organic Honey (1L)', farmer: 'Ferme Nkembe', price: '15,000 FCFA', rating: 5.0, image: 'https://images.unsplash.com/photo-1587049352846-4a222e784502?w=200&h=200&fit=crop' }
-  ];
-
-  const savedAddresses = [
-    { id: 1, label: 'Home', address: 'Akwa, Douala', phone: '+237 677 123 456', isDefault: true },
-    { id: 2, label: 'Work', address: 'Bonanjo, Douala', phone: '+237 677 123 456', isDefault: false }
-  ];
-
-  const getStatusBadge = (status) => {
-    const styles = {
-      delivered: { bg: '#ecfdf5', color: '#059669', icon: '✓', label: 'Delivered' },
-      shipped: { bg: '#eff6ff', color: '#2563eb', icon: '🚚', label: 'Shipped' },
-      processing: { bg: '#fef3c7', color: '#d97706', icon: '⏳', label: 'Processing' },
-      pending: { bg: '#fef2f2', color: '#dc2626', icon: '⏰', label: 'Pending' },
-      cancelled: { bg: '#f3f4f6', color: '#6b7280', icon: '✕', label: 'Cancelled' }
-    };
-    
-    const style = styles[status] || styles.pending;
-    
-    return (
-      <span style={{ padding: '6px 12px', borderRadius: '16px', fontSize: '13px', fontWeight: '600', background: style.bg, color: style.color, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-        <span>{style.icon}</span> {style.label}
-      </span>
-    );
-  };
-
-  return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f5f5f0 0%, #e8f1eb 100%)', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      {/* Navbar */}
-      <nav style={{ background: 'white', borderBottom: '1px solid #e5e7eb', padding: '1rem 2rem', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '40px', height: '40px', background: '#2d5f3f', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>🌾</div>
-            <span style={{ fontSize: '24px', fontWeight: '800', color: '#1a1a1a' }}>FarmLink</span>
-          </div>
-          <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
-            <a href="#" style={{ color: '#6b7280', textDecoration: 'none', fontWeight: '500', fontSize: '15px' }}>Home</a>
-            <a href="#" style={{ color: '#6b7280', textDecoration: 'none', fontWeight: '500', fontSize: '15px' }}>Marketplace</a>
-            <a href="#" style={{ color: '#2d5f3f', textDecoration: 'none', fontWeight: '600', fontSize: '15px' }}>My Account</a>
-            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#2d5f3f', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '14px', cursor: 'pointer' }}>
-              {consumerData.avatar}
-            </div>
-          </div>
+  const StatCard = ({ icon, label, value, color }) => (
+    <motion.div
+      whileHover={{ y: -5 }}
+      className="bg-white p-6 rounded-2xl shadow-sm border border-[var(--border-light)] relative overflow-hidden group"
+    >
+      <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${color} opacity-10 rounded-bl-full transition-transform group-hover:scale-110`} />
+      <div className="flex items-start justify-between mb-4">
+        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center text-white shadow-md`}>
+          {icon}
         </div>
-      </nav>
+      </div>
+      <h3 className="text-[var(--text-secondary)] text-sm font-medium">{label}</h3>
+      <p className="text-2xl font-bold text-[var(--text-primary)] mt-1">{value}</p>
+    </motion.div>
+  );
 
-      {/* Main Content */}
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '3rem 2rem' }}>
-        {/* Welcome Banner */}
-        <div style={{ background: 'linear-gradient(135deg, #2d5f3f 0%, #1d4f2f 100%)', borderRadius: '24px', padding: '3rem', marginBottom: '2rem', color: 'white', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: 0, right: 0, width: '300px', height: '300px', background: 'rgba(255,255,255,0.05)', borderRadius: '50%', transform: 'translate(30%, -30%)' }}></div>
-          <div style={{ position: 'absolute', bottom: 0, left: 0, width: '200px', height: '200px', background: 'rgba(255,255,255,0.05)', borderRadius: '50%', transform: 'translate(-30%, 30%)' }}></div>
-          
-          <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: '14px', fontWeight: '500', opacity: 0.9, marginBottom: '8px' }}>Welcome back! 👋</div>
-              <h1 style={{ fontSize: '36px', fontWeight: '800', margin: '0 0 12px 0' }}>{consumerData.name}</h1>
-              <p style={{ fontSize: '16px', opacity: 0.9, margin: 0 }}>Discover fresh products from local farmers</p>
-            </div>
-            <button style={{ padding: '14px 28px', background: 'white', color: '#2d5f3f', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-              🛒 Browse Marketplace
-            </button>
+  const renderDashboardOverview = () => (
+    <motion.div {...fadeIn} className="space-y-8">
+      {/* Welcome Banner */}
+      <div className="relative bg-gradient-to-r from-[var(--primary-600)] to-[var(--primary-800)] rounded-3xl p-8 text-white overflow-hidden shadow-xl">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2" />
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
+          <div>
+            <span className="inline-block px-3 py-1 rounded-full bg-white/20 text-sm font-medium mb-3 backdrop-blur-sm">
+              Member since Feb 2024
+            </span>
+            <h2 className="text-3xl font-bold mb-2">Welcome back, {consumerSummary.name.split(' ')[0]}! 👋</h2>
+            <p className="text-white/80">Ready to discover fresh products from local farmers?</p>
           </div>
+          <button className="px-6 py-3 bg-white text-[var(--primary-600)] rounded-xl font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95">
+            Browse Marketplace
+          </button>
         </div>
+      </div>
 
-        {/* Profile & Stats Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '2rem', marginBottom: '2rem' }}>
-          {/* Profile Card */}
-          <div style={{ background: 'white', borderRadius: '20px', padding: '2rem', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', height: 'fit-content' }}>
-            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-              <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: 'linear-gradient(135deg, #2d5f3f, #3d7f5f)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px', fontWeight: '800', margin: '0 auto 1rem', boxShadow: '0 8px 20px rgba(45,95,63,0.3)' }}>
-                {consumerData.avatar}
-              </div>
-              <h3 style={{ fontSize: '20px', fontWeight: '700', margin: '0 0 4px 0' }}>{consumerData.name}</h3>
-              <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 4px 0' }}>{consumerData.email}</p>
-              <p style={{ fontSize: '13px', color: '#9ca3af', margin: 0 }}>{consumerData.phone}</p>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '12px', padding: '6px 12px', background: '#f3f4f6', borderRadius: '16px', fontSize: '13px', color: '#6b7280' }}>
-                📍 {consumerData.location}
-              </div>
-            </div>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatCard
+          icon={<FaCreditCard size={20} />}
+          label="Total Spent"
+          value={consumerSummary.totalSpent}
+          color="from-[var(--primary-500)] to-[var(--primary-700)]"
+        />
+        <StatCard
+          icon={<FaShoppingBag size={20} />}
+          label="Orders Placed"
+          value={consumerSummary.ordersCount}
+          color="from-[var(--secondary-500)] to-[var(--secondary-700)]"
+        />
+        <StatCard
+          icon={<FaHeart size={20} />}
+          label="Saved Items"
+          value="12"
+          color="from-[var(--accent-500)] to-[var(--accent-700)]"
+        />
+      </div>
 
-            <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '1.5rem', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-                <span style={{ color: '#6b7280' }}>Member since</span>
-                <span style={{ fontWeight: '600' }}>{consumerData.memberSince}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
-                <span style={{ color: '#6b7280' }}>Account status</span>
-                <span style={{ color: '#059669', fontWeight: '600' }}>✓ Verified</span>
-              </div>
-            </div>
-
-            <button style={{ width: '100%', padding: '12px', background: '#2d5f3f', color: 'white', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', marginBottom: '10px' }}>
-              Edit Profile
-            </button>
-            <button style={{ width: '100%', padding: '12px', background: 'transparent', color: '#6b7280', border: '2px solid #e5e7eb', borderRadius: '12px', fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
-              Settings
-            </button>
-          </div>
-
-          {/* Stats Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
-            <div style={{ background: 'white', borderRadius: '20px', padding: '1.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', transition: 'transform 0.3s', cursor: 'pointer' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #2d5f3f, #3d7f5f)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', marginBottom: '1rem' }}>
-                💰
-              </div>
-              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Spent</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#1a1a1a' }}>{consumerData.totalSpent}</div>
-            </div>
-
-            <div style={{ background: 'white', borderRadius: '20px', padding: '1.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', transition: 'transform 0.3s', cursor: 'pointer' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', marginBottom: '1rem' }}>
+      {/* Recent Orders Preview */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Recent Orders</h3>
+          <button
+            onClick={() => setActiveSection(SECTIONS.ORDERS)}
+            className="text-sm text-[var(--primary-600)] font-medium hover:underline"
+          >
+            View All History
+          </button>
+        </div>
+        <div className="space-y-4">
+          {consumerRecentOrders.map((order) => (
+            <div key={order.id} className="flex flex-col md:flex-row items-center gap-4 p-4 rounded-xl border border-[var(--border-light)] hover:bg-[var(--bg-secondary)] transition-all group cursor-pointer">
+              <div className="w-12 h-12 rounded-lg bg-[var(--primary-100)] flex items-center justify-center text-[var(--primary-600)] font-bold text-lg">
                 📦
               </div>
-              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Orders Placed</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#1a1a1a' }}>{consumerData.ordersCount}</div>
-            </div>
-
-            <div style={{ background: 'white', borderRadius: '20px', padding: '1.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', transition: 'transform 0.3s', cursor: 'pointer' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', marginBottom: '1rem' }}>
-                ❤️
+              <div className="flex-1 text-center md:text-left">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-1 mb-1">
+                  <h4 className="font-bold text-[var(--text-primary)]">Order #{order.id}</h4>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${order.status === 'Delivered' ? 'bg-green-100 text-green-700' :
+                      order.status === 'On the way' ? 'bg-blue-100 text-blue-700' :
+                        'bg-yellow-100 text-yellow-700'
+                    }`}>
+                    {order.status}
+                  </span>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)]">From {order.farmer} • {order.date}</p>
               </div>
-              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Favorite Farmers</div>
-              <div style={{ fontSize: '24px', fontWeight: '800', color: '#1a1a1a' }}>{consumerData.favouriteFarmers}</div>
+              <div className="text-right flex flex-col items-center md:items-end">
+                <span className="font-bold text-[var(--primary-600)]">{order.total}</span>
+                <button className="text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--primary-600)] transition-colors flex items-center gap-1 mt-1">
+                  Details <FaChevronRight size={10} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const renderOrders = () => (
+    <motion.div {...fadeIn} className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
+      <h3 className="text-lg font-bold text-[var(--text-primary)] mb-6">Order History</h3>
+      <div className="space-y-4">
+        {/* Extended list simulation using existing data */}
+        {[...consumerRecentOrders, ...consumerRecentOrders].map((order, index) => (
+          <div key={`${order.id}-${index}`} className="flex flex-col md:flex-row items-center gap-4 p-4 rounded-xl border border-[var(--border-light)] hover:bg-[var(--bg-secondary)] transition-all">
+            <div className="flex-1">
+              <div className="flex justify-between mb-2">
+                <span className="font-bold text-[var(--text-primary)]">Order #{order.id}</span>
+                <span className="font-bold text-[var(--primary-600)]">{order.total}</span>
+              </div>
+              <p className="text-sm text-[var(--text-secondary)] mb-1">Purchased from: <span className="font-medium">{order.farmer}</span></p>
+              <p className="text-xs text-[var(--text-tertiary)]">{order.date}</p>
+            </div>
+            <div className="flex gap-2">
+              <button className="px-4 py-2 border border-[var(--border-color)] rounded-lg text-sm font-medium hover:bg-gray-50">View Invoice</button>
+              <button className="px-4 py-2 bg-[var(--primary-500)] text-white rounded-lg text-sm font-medium hover:bg-[var(--primary-600)]">Reorder</button>
             </div>
           </div>
-        </div>
+        ))}
+      </div>
+    </motion.div>
+  );
 
-        {/* Quick Actions */}
-        <div style={{ background: 'white', borderRadius: '20px', padding: '2rem', marginBottom: '2rem', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            ⚡ Quick Actions
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
-            {[
-              { icon: '👤', label: 'My Profile', color: '#2d5f3f' },
-              { icon: '📍', label: 'Addresses', color: '#3b82f6' },
-              { icon: '💳', label: 'Payments', color: '#8b5cf6' },
-              { icon: '⭐', label: 'Reviews', color: '#f59e0b' }
-            ].map((action, i) => (
-              <div key={i} style={{ padding: '1.5rem', border: '2px solid #f3f4f6', borderRadius: '16px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.3s' }}>
-                <div style={{ fontSize: '32px', marginBottom: '8px' }}>{action.icon}</div>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: '#1a1a1a' }}>{action.label}</div>
+  const renderWishlist = () => (
+    <motion.div {...fadeIn} className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">My Wishlist</h3>
+          <p className="text-sm text-[var(--text-secondary)]">{wishlistItems.length} items saved for later</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {wishlistItems.map((item) => (
+          <div key={item.id} className="border border-[var(--border-light)] rounded-xl overflow-hidden group hover:shadow-md transition-all">
+            <div className="relative h-48 overflow-hidden">
+              <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+              <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-red-500 shadow-md hover:bg-red-50 transition-colors">
+                <FaHeart />
+              </button>
+              {!item.inStock && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <span className="px-3 py-1 bg-white rounded-full text-xs font-bold text-gray-800">
+                    Out of Stock
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="p-4">
+              <h4 className="font-bold text-[var(--text-primary)] mb-1">{item.name}</h4>
+              <p className="text-sm text-[var(--text-secondary)] mb-3">Sold by {item.farmer}</p>
+              <div className="flex items-center justify-between mt-auto">
+                <span className="font-bold text-[var(--primary-600)]">{item.price}</span>
+                <button
+                  disabled={!item.inStock}
+                  className="px-3 py-1.5 bg-[var(--primary-500)] text-white text-sm rounded-lg font-medium hover:bg-[var(--primary-600)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Add to Cart
+                </button>
               </div>
-            ))}
+            </div>
           </div>
-        </div>
+        ))}
+      </div>
+    </motion.div>
+  );
 
-        {/* Main Content Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '2rem' }}>
-          {/* Recent Orders */}
-          <div style={{ background: 'white', borderRadius: '20px', padding: '2rem', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '700', margin: 0 }}>Recent Orders</h2>
-              <button style={{ padding: '8px 16px', background: 'transparent', color: '#2d5f3f', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
-                View All
+  const renderAddresses = () => (
+    <motion.div {...fadeIn} className="max-w-3xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-bold text-[var(--text-primary)]">My Addresses</h3>
+        <button className="flex items-center gap-2 px-4 py-2 bg-[var(--primary-500)] text-white rounded-lg font-medium hover:bg-[var(--primary-600)]">
+          <FaPlus size={12} /> Add New
+        </button>
+      </div>
+      <div className="space-y-4">
+        {addresses.map((addr) => (
+          <div key={addr.id} className="bg-white p-6 rounded-2xl shadow-sm border border-[var(--border-light)] flex justify-between items-start">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="font-bold text-[var(--text-primary)]">{addr.label}</span>
+                {addr.isDefault && (
+                  <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded">Default</span>
+                )}
+              </div>
+              <p className="text-sm font-medium">{addr.name}</p>
+              <p className="text-sm text-[var(--text-secondary)]">{addr.address}</p>
+              <p className="text-sm text-[var(--text-secondary)]">{addr.city}, {addr.region}</p>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">{addr.phone}</p>
+            </div>
+            <div className="flex gap-2">
+              <button className="p-2 text-[var(--text-secondary)] hover:text-[var(--primary-600)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors">
+                <FaEdit />
+              </button>
+              {!addr.isDefault && (
+                <button className="p-2 text-[var(--text-secondary)] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                  <FaTrash />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+
+  const renderProfile = () => (
+    <motion.div {...fadeIn} className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-8">
+      <div className="text-center mb-8">
+        <div className="w-24 h-24 rounded-full bg-[var(--primary-100)] mx-auto mb-4 flex items-center justify-center text-[var(--primary-600)] text-3xl font-bold">
+          {consumerSummary.name.charAt(0)}
+        </div>
+        <h2 className="text-2xl font-bold text-[var(--text-primary)]">{consumerSummary.name}</h2>
+        <p className="text-[var(--text-secondary)]">Consumer Account</p>
+      </div>
+
+      <form className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Input label="Full Name" defaultValue={consumerSummary.name} />
+          <Input label="Email" type="email" defaultValue="marie.nguema@email.cm" />
+        </div>
+        <Input label="Phone Number" type="tel" defaultValue="+237 677 123 456" />
+
+        <div className="pt-4">
+          <button type="button" className="w-full py-3 bg-[var(--primary-500)] text-white font-bold rounded-xl hover:bg-[var(--primary-600)] transition-all">
+            Save Profile
+          </button>
+        </div>
+      </form>
+    </motion.div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[var(--bg-secondary)]">
+      <Navbar />
+
+      <div className="pt-24 pb-12 px-4 md:px-8 max-w-[1600px] mx-auto">
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* Sidebar */}
+          <div className={`flex-shrink-0 w-full md:w-64 bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-4 h-fit sticky top-24 transition-all ${isSidebarOpen ? 'block' : 'hidden md:block'}`}>
+            <div className="flex items-center gap-3 px-4 py-4 mb-4 border-b border-[var(--border-light)]">
+              <div className="w-10 h-10 rounded-full bg-[var(--primary-100)] flex items-center justify-center text-[var(--primary-600)]">
+                <FaUserCircle size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-[var(--text-primary)] text-sm">{consumerSummary.name}</h3>
+                <p className="text-xs text-[var(--text-secondary)]">Consumer Account</p>
+              </div>
+            </div>
+
+            <nav className="space-y-1">
+              <SidebarItem id={SECTIONS.DASHBOARD} icon={<FaHome />} label="Overview" />
+              <SidebarItem id={SECTIONS.ORDERS} icon={<FaHistory />} label="Order History" />
+              <SidebarItem id={SECTIONS.WISHLIST} icon={<FaHeart />} label="Wishlist" />
+              <SidebarItem id={SECTIONS.ADDRESSES} icon={<FaMapMarkerAlt />} label="Addresses" />
+              <SidebarItem id={SECTIONS.PROFILE} icon={<FaUserCircle />} label="Profile Settings" />
+            </nav>
+
+            <div className="mt-8 pt-4 border-t border-[var(--border-light)]">
+              <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-colors font-medium">
+                <FaSignOutAlt />
+                <span>Sign Out</span>
               </button>
             </div>
-
-            {recentOrders.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {recentOrders.map(order => (
-                  <div key={order.id} style={{ display: 'flex', gap: '1rem', padding: '1rem', border: '1px solid #f3f4f6', borderRadius: '16px', transition: 'all 0.3s', cursor: 'pointer' }}>
-                    <img src={order.image} alt={order.items} style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover' }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: '700', color: '#2d5f3f' }}>{order.id}</span>
-                        {getStatusBadge(order.status)}
-                      </div>
-                      <div style={{ fontSize: '15px', fontWeight: '600', marginBottom: '4px' }}>{order.items}</div>
-                      <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '6px' }}>From {order.farmer}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '16px', fontWeight: '700', color: '#1a1a1a' }}>{order.total}</span>
-                        <span style={{ fontSize: '13px', color: '#9ca3af' }}>{order.date}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-                <div style={{ fontSize: '64px', marginBottom: '1rem' }}>📦</div>
-                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>No orders yet</h3>
-                <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '1.5rem' }}>Start shopping fresh farm products</p>
-                <button style={{ padding: '12px 24px', background: '#2d5f3f', color: 'white', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
-                  Browse Products →
-                </button>
-              </div>
-            )}
           </div>
 
-          {/* Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            {/* Suggested Products */}
-            <div style={{ background: 'white', borderRadius: '20px', padding: '2rem', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '1.5rem' }}>Suggested for You</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {suggestions.map(item => (
-                  <div key={item.id} style={{ display: 'flex', gap: '12px', padding: '12px', border: '1px solid #f3f4f6', borderRadius: '12px', transition: 'all 0.3s', cursor: 'pointer' }}>
-                    <img src={item.image} alt={item.name} style={{ width: '70px', height: '70px', borderRadius: '10px', objectFit: 'cover' }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>{item.name}</div>
-                      <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px' }}>{item.farmer}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '15px', fontWeight: '700', color: '#2d5f3f' }}>{item.price}</span>
-                        <span style={{ fontSize: '13px', color: '#f59e0b' }}>★ {item.rating}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Saved Addresses */}
-            <div style={{ background: 'white', borderRadius: '20px', padding: '2rem', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '1.5rem' }}>Saved Addresses</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {savedAddresses.map(addr => (
-                  <div key={addr.id} style={{ padding: '12px', border: '1px solid #f3f4f6', borderRadius: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '14px', fontWeight: '700' }}>{addr.label}</span>
-                      {addr.isDefault && (
-                        <span style={{ fontSize: '11px', padding: '2px 8px', background: '#ecfdf5', color: '#059669', borderRadius: '8px', fontWeight: '600' }}>Default</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '13px', color: '#6b7280' }}>{addr.address}</div>
-                  </div>
-                ))}
-                <button style={{ padding: '10px', background: 'transparent', color: '#2d5f3f', border: '2px dashed #e5e7eb', borderRadius: '12px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
-                  + Add New Address
-                </button>
-              </div>
-            </div>
+          {/* Main Content */}
+          <div className="flex-1">
+            <AnimatePresence mode="wait">
+              {activeSection === SECTIONS.DASHBOARD && renderDashboardOverview()}
+              {activeSection === SECTIONS.WISHLIST && renderWishlist()}
+              {activeSection === SECTIONS.ORDERS && renderOrders()}
+              {activeSection === SECTIONS.ADDRESSES && renderAddresses()}
+              {activeSection === SECTIONS.PROFILE && renderProfile()}
+            </AnimatePresence>
           </div>
         </div>
       </div>
+
+      <Footer />
     </div>
   );
 };

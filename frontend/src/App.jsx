@@ -16,6 +16,9 @@ import Cart from './pages/Cart';
 import './styles/global.css';
 import FarmerProfile from './pages/FarmerProfile';
 import Error404Page from './pages/error/Error404Page';
+import ProductDetails from './pages/ProductDetails';
+import Checkout from './pages/Checkout';
+import PaymentStatus from './pages/PaymentStatus';
 
 const App = () => {
   return (
@@ -26,7 +29,9 @@ const App = () => {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/marketplace" element={<Marketplace />} />
+              <Route path="/products/:id" element={<ProductDetails />} />
               <Route path="/farmers" element={<Farmers />} />
+              <Route path="/farmers/:id" element={<FarmerProfile />} />
               <Route path="/about" element={<About />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
@@ -34,7 +39,8 @@ const App = () => {
               <Route path="/consumer/dashboard" element={<ConsumerDashboard />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/cart" element={<Cart />} />
-              <Route path="/farmers/:id" element={<FarmerProfile />} />
+              <Route path="/checkout" element={<Checkout />} />
+              <Route path="/payment/status" element={<PaymentStatus />} />
               <Route path="/404" element={<Error404Page />} />
               <Route path="*" element={<Error404Page />} />
             </Routes>
