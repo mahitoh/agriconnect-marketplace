@@ -38,8 +38,8 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-white flex">
       {/* Left Side - Form */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-12 lg:px-24 xl:px-32 relative">
-        <Link to="/" className="absolute top-8 left-8 flex items-center gap-2 group">
+      <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-12 lg:px-24 xl:px-32 relative pt-24">
+        <Link to="/" className="absolute top-8 left-8 flex items-center gap-2 groupmb-10 ">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-700)] flex items-center justify-center text-white shadow-lg group-hover:rotate-12 transition-transform">
             <GiWheat size={20} />
           </div>
@@ -114,7 +114,7 @@ const Login = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <button className="flex items-center justify-center gap-2 py-3 border-2 border-[var(--border-color)] rounded-xl hover:bg-[var(--bg-secondary)] hover:border-[var(--primary-200)] transition-all font-medium text-[var(--text-secondary)]">
-              <FaGoogle className="text-red-500" /> Google
+              <FaGoogle className="text-red-500" /> Google 
             </button>
             <button className="flex items-center justify-center gap-2 py-3 border-2 border-[var(--border-color)] rounded-xl hover:bg-[var(--bg-secondary)] hover:border-[var(--primary-200)] transition-all font-medium text-[var(--text-secondary)]">
               <FaFacebook className="text-blue-600" /> Facebook
