@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaFilter, FaTh, FaList, FaSearch, FaTimes } from 'react-icons/fa';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import ProductCard from '../components/ProductCard';
-import { products } from '../data/mockData';
+import { products as mockProducts } from '../data/mockData';
 import { useCart } from '../context/CartContext';
+import { API_ENDPOINTS } from '../config/api';
 
 const Marketplace = () => {
   const { addToCart } = useCart();
@@ -16,14 +17,91 @@ const Marketplace = () => {
   const [priceRange, setPriceRange] = useState([0, 100000]);
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [sortBy, setSortBy] = useState('featured');
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch products from API
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(API_ENDPOINTS.PRODUCTS);
+      const data = await response.json();
+
+      if (data.success && data.data.products) {
+        // Transform API products to match ProductCard format
+        const transformedProducts = data.data.products.map(product => {
+          // Handle different response formats
+          const farmerProfile = product.profiles || (Array.isArray(product.profiles) ? product.profiles[0] : null);
+          const farmerName = farmerProfile?.full_name || product.farmer_name || 'Farmer';
+          const farmerLocation = farmerProfile?.location || product.harvest_location || product.location || 'Location not specified';
+          
+          console.log('🔍 Product:', product.name, 'Farmer:', farmerName, 'Profile data:', product.profiles);
+          
+          // Determine badge based on category
+          const badgeMap = {
+            'vegetables': 'Fresh',
+            'fruits': 'Popular',
+            'grains': 'Bio',
+            'livestock': 'Fresh',
+            'dairy': 'Fresh',
+            'other': 'New'
+          };
+          const badge = badgeMap[product.category] || 'New';
+          const badgeColors = {
+            'Fresh': '#ef5350',
+            'Popular': '#2d5f3f',
+            'Bio': '#66bb6a',
+            'New': '#2196f3'
+          };
+
+          return {
+            id: product.id,
+            name: product.name,
+            image: product.image_url || 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=500&h=350&fit=crop',
+            badge: badge,
+            badgeColor: badgeColors[badge] || '#2d5f3f',
+            rating: '4.8', // Default rating (can be fetched from reviews later)
+            reviews: '0',
+            farmer: farmerName,
+            location: farmerLocation,
+            price: `${product.price.toLocaleString()} FCFA`,
+            oldPrice: null,
+            category: product.category,
+            quantity: product.quantity,
+            description: product.description
+          };
+        });
+        setProducts(transformedProducts);
+      } else {
+        throw new Error('Failed to fetch products');
+      }
+    } catch (err) {
+      console.error('Error fetching products:', err);
+      setError('Failed to load products. Showing sample products.');
+      // Fallback to mock data
+      setProducts(mockProducts);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAddToCart = (product) => {
+    const priceValue = typeof product.price === 'string' 
+      ? parseInt(product.price.replace(/[^\d]/g, ''))
+      : product.price;
+    
     const cartProduct = {
       id: product.id,
       name: product.name,
-      price: parseInt(product.price.replace(/[^\d]/g, '')),
+      price: priceValue,
       image: product.image,
-      category: product.badge,
+      category: product.category || product.badge,
       farmer: product.farmer,
       location: product.location
     };
@@ -31,16 +109,19 @@ const Marketplace = () => {
   };
 
   // Extract unique categories and locations
-  const categories = [...new Set(products.map(p => p.badge))];
+  const categories = [...new Set(products.map(p => p.category || p.badge))];
   const locations = [...new Set(products.map(p => p.location))];
 
   // Filter products
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.farmer.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(product.badge);
-    const price = parseInt(product.price.replace(/[^\d]/g, ''));
-    const matchesPrice = price >= priceRange[0] && price <= priceRange[1];
+    const productCategory = product.category || product.badge;
+    const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(productCategory);
+    const priceValue = typeof product.price === 'string' 
+      ? parseInt(product.price.replace(/[^\d]/g, ''))
+      : product.price;
+    const matchesPrice = priceValue >= priceRange[0] && priceValue <= priceRange[1];
     const matchesLocation = selectedLocations.length === 0 || selectedLocations.includes(product.location);
 
     return matchesSearch && matchesCategory && matchesPrice && matchesLocation;
@@ -48,11 +129,17 @@ const Marketplace = () => {
 
   // Sort products
   const sortedProducts = [...filteredProducts].sort((a, b) => {
+    const getPrice = (product) => {
+      return typeof product.price === 'string' 
+        ? parseInt(product.price.replace(/[^\d]/g, ''))
+        : product.price;
+    };
+
     switch (sortBy) {
       case 'price-low':
-        return parseInt(a.price.replace(/[^\d]/g, '')) - parseInt(b.price.replace(/[^\d]/g, ''));
+        return getPrice(a) - getPrice(b);
       case 'price-high':
-        return parseInt(b.price.replace(/[^\d]/g, '')) - parseInt(a.price.replace(/[^\d]/g, ''));
+        return getPrice(b) - getPrice(a);
       case 'rating':
         return parseFloat(b.rating) - parseFloat(a.rating);
       default:
@@ -205,7 +292,7 @@ const Marketplace = () => {
                               onChange={() => toggleCategory(category)}
                               className="w-5 h-5 rounded border-2 border-[var(--border-color)] text-[var(--primary-500)] focus:ring-2 focus:ring-[var(--primary-500)]/20"
                             />
-                            <span className="text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">
+                            <span className="text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors capitalize">
                               {category}
                             </span>
                           </label>
@@ -295,7 +382,16 @@ const Marketplace = () => {
               </div>
 
               {/* Products */}
-              {sortedProducts.length > 0 ? (
+              {loading ? (
+                <div className="text-center py-20">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--primary-500)] mb-4"></div>
+                  <p className="text-[var(--text-secondary)]">Loading products...</p>
+                </div>
+              ) : error ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
+                  <p className="text-yellow-700">{error}</p>
+                </div>
+              ) : sortedProducts.length > 0 ? (
                 <div className={`grid gap-6 ${viewMode === 'grid'
                     ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
                     : 'grid-cols-1'

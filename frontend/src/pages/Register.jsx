@@ -17,6 +17,7 @@ import {
 } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import Input from '../components/ui/input';
+import { allCities } from '../data/cameroonCities';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -24,6 +25,8 @@ const Register = () => {
   const [step, setStep] = useState(1);
   const [userType, setUserType] = useState('buyer'); // 'buyer' or 'farmer'
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -41,6 +44,7 @@ const Register = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+    setError(''); // Clear error on input change
   };
 
   const handleNext = () => {
@@ -54,16 +58,44 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+    setSuccess('');
 
-    // Simulate API call
-    setTimeout(() => {
-      signup({
-        ...formData,
-        role: userType === 'buyer' ? 'customer' : 'farmer'
-      });
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
       setLoading(false);
-      navigate('/login');
-    }, 1500);
+      return;
+    }
+
+    // Validate terms acceptance
+    if (!formData.acceptTerms) {
+      setError('You must accept the terms and conditions');
+      setLoading(false);
+      return;
+    }
+
+    // Prepare data for backend
+    const signupData = {
+      fullName: formData.fullName,
+      email: formData.email,
+      password: formData.password,
+      phone: formData.phone,
+      role: userType === 'buyer' ? 'customer' : 'farmer',
+    };
+
+    const result = await signup(signupData);
+
+    if (result.success) {
+      setSuccess(result.message);
+      // Redirect to login after 2 seconds
+      setTimeout(() => {
+        navigate('/login');
+      }, 2000);
+    } else {
+      setError(result.message);
+      setLoading(false);
+    }
   };
 
   return (
@@ -186,14 +218,25 @@ const Register = () => {
                       icon={<FaPhone size={16} />}
                       placeholder="+237..."
                     />
-                    <Input
-                      label="Location"
-                      name="location"
-                      value={formData.location}
-                      onChange={handleChange}
-                      icon={<FaMapMarkerAlt size={16} />}
-                      placeholder="City, Region"
-                    />
+                    <div className="relative mb-4">
+                      <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                        Location
+                      </label>
+                      <div className="relative">
+                        <FaMapMarkerAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={16} />
+                        <select
+                          name="location"
+                          value={formData.location}
+                          onChange={handleChange}
+                          className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-[var(--border-color)] bg-white text-[var(--text-primary)] focus:border-[var(--primary-500)] focus:ring-4 focus:ring-[var(--primary-500)]/10 outline-none transition-all"
+                        >
+                          <option value="">Select City/Town</option>
+                          {allCities.map(city => (
+                            <option key={city} value={city}>{city}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
                   {userType === 'farmer' && (
                     <Input
@@ -285,6 +328,20 @@ const Register = () => {
                 </button>
               )}
             </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            )}
+
+            {/* Success Message */}
+            {success && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                {success}
+              </div>
+            )}
           </form>
 
           <p className="mt-8 text-center text-[var(--text-secondary)]">

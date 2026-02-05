@@ -19,6 +19,7 @@ import Error404Page from './pages/error/Error404Page';
 import ProductDetails from './pages/ProductDetails';
 import Checkout from './pages/Checkout';
 import PaymentStatus from './pages/PaymentStatus';
+import ConnectionTest from './pages/ConnectionTest';
 
 const App = () => {
   return (

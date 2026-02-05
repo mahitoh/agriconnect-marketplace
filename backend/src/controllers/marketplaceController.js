@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 
 // Browse all products with pagination, search, filter, and sort
 exports.browseProducts = async (req, res) => {
@@ -251,11 +251,15 @@ exports.searchFarmers = async (req, res) => {
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
 
-    // Build query for farmers with products
-    let query = supabase
+    // Build query for farmers
+    // Using supabaseAdmin to bypass RLS policies
+    // Note: Temporarily showing all farmers regardless of approval status for debugging
+    let query = supabaseAdmin
       .from('profiles')
-      .select('id, full_name, bio, location, farm_details, created_at', { count: 'exact' })
-      .eq('role', 'farmer');
+      .select('id, full_name, bio, location, farm_details, created_at, approved, role', { count: 'exact' })
+      .ilike('role', 'farmer'); // Case-insensitive match
+    // Uncomment below to show only approved farmers
+    // .eq('approved', true);
 
     // Apply search filter
     if (search) {
@@ -270,22 +274,75 @@ exports.searchFarmers = async (req, res) => {
     // Pagination
     query = query.range(offset, offset + limitNum - 1);
 
+    console.log('🔍 Fetching farmers from database...');
     const { data: farmers, error, count } = await query;
 
-    if (error) {      return res.status(500).json({ error: 'Failed to search farmers' });
+    if (error) {
+      console.error('❌ Error fetching farmers:', error);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to search farmers',
+        errorDetails: error.message,
+        farmers: []
+      });
+    }
+
+    console.log(`✅ Found ${farmers?.length || 0} farmers (total: ${count || 0})`);
+    
+    if (farmers && farmers.length > 0) {
+      console.log('📋 Farmers:', farmers.map(f => ({
+        id: f.id,
+        name: f.full_name,
+        approved: f.approved,
+        location: f.location
+      })));
+    } else {
+      console.log('⚠️ No farmers found. Checking all profiles...');
+      // Debug: Check all profiles using admin client
+      const { data: allProfiles, error: allProfilesError } = await supabaseAdmin
+        .from('profiles')
+        .select('id, full_name, role, approved')
+        .limit(20);
+      
+      if (allProfilesError) {
+        console.error('❌ Error fetching all profiles:', allProfilesError);
+      } else {
+        console.log('📊 All profiles:', allProfiles);
+        if (allProfiles && allProfiles.length > 0) {
+          const farmerRoles = allProfiles.map(p => p.role).filter(Boolean);
+          console.log('📊 Unique roles found:', [...new Set(farmerRoles)]);
+          const farmersInList = allProfiles.filter(p => p.role && p.role.toLowerCase() === 'farmer');
+          console.log(`📊 Profiles with role containing 'farmer': ${farmersInList.length}`, farmersInList);
+        }
+      }
+    }
+
+    // Handle empty farmers array
+    if (!farmers || farmers.length === 0) {
+      return res.json({
+        success: true,
+        farmers: [],
+        pagination: {
+          currentPage: pageNum,
+          totalPages: 0,
+          totalItems: 0,
+          itemsPerPage: limitNum
+        }
+      });
     }
 
     // Get product count for each farmer
+    console.log(`📦 Processing ${farmers.length} farmers...`);
     const farmersWithProductCount = await Promise.all(
       farmers.map(async (farmer) => {
-        const { count: productCount } = await supabase
+        const { count: productCount } = await supabaseAdmin
           .from('products')
           .select('*', { count: 'exact', head: true })
           .eq('farmer_id', farmer.id)
           .gte('quantity', 1);
 
         // Get farmer rating
-        const { data: ratingData } = await supabase
+        const { data: ratingData } = await supabaseAdmin
           .from('farmer_ratings_summary')
           .select('*')
           .eq('farmer_id', farmer.id)
@@ -302,16 +359,23 @@ exports.searchFarmers = async (req, res) => {
     const totalPages = Math.ceil(count / limitNum);
 
     res.json({
-      farmers: farmersWithProductCount,
+      success: true,
+      farmers: farmersWithProductCount || [],
       pagination: {
         currentPage: pageNum,
         totalPages,
-        totalItems: count,
+        totalItems: count || 0,
         itemsPerPage: limitNum
       }
     });
 
-  } catch (error) {    res.status(500).json({ error: 'Server error' });
+  } catch (error) {
+    console.error('Search farmers error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Server error',
+      farmers: []
+    });
   }
 };
 
@@ -321,11 +385,14 @@ exports.getFarmerProfile = async (req, res) => {
     const { farmerId } = req.params;
 
     // Get farmer profile
-    const { data: farmer, error: farmerError } = await supabase
+    // Using supabaseAdmin to bypass RLS policies
+    // Note: Temporarily removed approved filter for debugging
+    const { data: farmer, error: farmerError } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, bio, location, farm_details, created_at')
+      .select('id, full_name, bio, location, farm_details, created_at, approved, role')
       .eq('id', farmerId)
-      .eq('role', 'farmer')
+      .ilike('role', 'farmer') // Case-insensitive match
+      // .eq('approved', true) // Uncomment to show only approved farmers
       .single();
 
     if (farmerError || !farmer) {
@@ -333,7 +400,7 @@ exports.getFarmerProfile = async (req, res) => {
     }
 
     // Get farmer's products
-    const { data: products } = await supabase
+    const { data: products } = await supabaseAdmin
       .from('products')
       .select('*')
       .eq('farmer_id', farmerId)
@@ -341,14 +408,14 @@ exports.getFarmerProfile = async (req, res) => {
       .order('created_at', { ascending: false });
 
     // Get farmer rating
-    const { data: ratingData } = await supabase
+    const { data: ratingData } = await supabaseAdmin
       .from('farmer_ratings_summary')
       .select('*')
       .eq('farmer_id', farmerId)
       .single();
 
     // Get recent reviews
-    const { data: reviews } = await supabase
+    const { data: reviews } = await supabaseAdmin
       .from('reviews')
       .select(`
         *,

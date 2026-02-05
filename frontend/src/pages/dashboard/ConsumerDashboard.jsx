@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   FaShoppingBag,
   FaHeart,
@@ -20,6 +21,7 @@ import {
 import Navbar from '../../components/layout/Navbar';
 import Footer from '../../components/layout/Footer';
 import Input from '../../components/ui/input';
+import { useAuth } from '../../context/AuthContext';
 import { consumerSummary, consumerRecentOrders, consumerSuggestions } from '../../data/dashboardMock';
 
 const SECTIONS = {
@@ -33,6 +35,8 @@ const SECTIONS = {
 const ConsumerDashboard = () => {
   const [activeSection, setActiveSection] = useState(SECTIONS.DASHBOARD);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   // Local Wishlist Data
   const wishlistItems = [
@@ -43,8 +47,8 @@ const ConsumerDashboard = () => {
 
   // Dummy Addresses
   const addresses = [
-    { id: 1, label: 'Home', name: 'Marie Nguema', phone: '+237 677 123 456', address: '123 Main St, Akwa', city: 'Douala', region: 'Littoral', isDefault: true },
-    { id: 2, label: 'Office', name: 'Marie Nguema', phone: '+237 677 123 456', address: 'Business Park, Bonanjo', city: 'Douala', region: 'Littoral', isDefault: false }
+    { id: 1, label: 'Home', name: user?.full_name || 'Customer', phone: user?.phone || '+237 XXX XXX XXX', address: '123 Main St, Akwa', city: 'Douala', region: 'Littoral', isDefault: true },
+    { id: 2, label: 'Office', name: user?.full_name || 'Customer', phone: user?.phone || '+237 XXX XXX XXX', address: 'Business Park, Bonanjo', city: 'Douala', region: 'Littoral', isDefault: false }
   ];
 
   const fadeIn = {
@@ -93,7 +97,7 @@ const ConsumerDashboard = () => {
             <span className="inline-block px-3 py-1 rounded-full bg-white/20 text-sm font-medium mb-3 backdrop-blur-sm">
               Member since Feb 2024
             </span>
-            <h2 className="text-3xl font-bold mb-2">Welcome back, {consumerSummary.name.split(' ')[0]}! 👋</h2>
+            <h2 className="text-3xl font-bold mb-2">Welcome back, {user?.full_name?.split(' ')[0] || 'Customer'}! 👋</h2>
             <p className="text-white/80">Ready to discover fresh products from local farmers?</p>
           </div>
           <button className="px-6 py-3 bg-white text-[var(--primary-600)] rounded-xl font-bold shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95">
@@ -278,18 +282,18 @@ const ConsumerDashboard = () => {
     <motion.div {...fadeIn} className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-8">
       <div className="text-center mb-8">
         <div className="w-24 h-24 rounded-full bg-[var(--primary-100)] mx-auto mb-4 flex items-center justify-center text-[var(--primary-600)] text-3xl font-bold">
-          {consumerSummary.name.charAt(0)}
+          {user?.full_name?.charAt(0) || 'C'}
         </div>
-        <h2 className="text-2xl font-bold text-[var(--text-primary)]">{consumerSummary.name}</h2>
+        <h2 className="text-2xl font-bold text-[var(--text-primary)]">{user?.full_name || 'Consumer'}</h2>
         <p className="text-[var(--text-secondary)]">Consumer Account</p>
       </div>
 
       <form className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Input label="Full Name" defaultValue={consumerSummary.name} />
-          <Input label="Email" type="email" defaultValue="marie.nguema@email.cm" />
+          <Input label="Full Name" defaultValue={user?.full_name || ''} />
+          <Input label="Email" type="email" defaultValue={user?.email || ''} />
         </div>
-        <Input label="Phone Number" type="tel" defaultValue="+237 677 123 456" />
+        <Input label="Phone Number" type="tel" defaultValue={user?.phone || ''} />
 
         <div className="pt-4">
           <button type="button" className="w-full py-3 bg-[var(--primary-500)] text-white font-bold rounded-xl hover:bg-[var(--primary-600)] transition-all">
@@ -309,11 +313,11 @@ const ConsumerDashboard = () => {
           {/* Sidebar */}
           <div className={`flex-shrink-0 w-full md:w-64 bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-4 h-fit sticky top-24 transition-all ${isSidebarOpen ? 'block' : 'hidden md:block'}`}>
             <div className="flex items-center gap-3 px-4 py-4 mb-4 border-b border-[var(--border-light)]">
-              <div className="w-10 h-10 rounded-full bg-[var(--primary-100)] flex items-center justify-center text-[var(--primary-600)]">
-                <FaUserCircle size={20} />
+              <div className="w-10 h-10 rounded-full bg-[var(--primary-100)] flex items-center justify-center text-[var(--primary-600)] font-bold text-sm">
+                {user?.full_name?.charAt(0) || 'C'}
               </div>
               <div>
-                <h3 className="font-bold text-[var(--text-primary)] text-sm">{consumerSummary.name}</h3>
+                <h3 className="font-bold text-[var(--text-primary)] text-sm">{user?.full_name || 'Customer'}</h3>
                 <p className="text-xs text-[var(--text-secondary)]">Consumer Account</p>
               </div>
             </div>

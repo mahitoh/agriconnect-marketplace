@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   FaUsers,
   FaTractor,
@@ -16,11 +17,15 @@ import {
   FaExclamationTriangle,
   FaEdit,
   FaBan,
-  FaDownload
+  FaDownload,
+  FaTimes,
+  FaArrowLeft
 } from 'react-icons/fa';
 import Navbar from '../../components/layout/Navbar';
 import Footer from '../../components/layout/Footer';
 import Input from '../../components/ui/input';
+import { useAuth } from '../../context/AuthContext';
+import { API_ENDPOINTS } from '../../config/api';
 import { adminSummary, adminRecentActivity, adminTopFarmers } from '../../data/dashboardMock';
 
 const SECTIONS = {
@@ -34,15 +39,334 @@ const SECTIONS = {
 const AdminDashboard = () => {
   const [activeSection, setActiveSection] = useState(SECTIONS.OVERVIEW);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [pendingFarmers, setPendingFarmers] = useState([]);
+  const [loadingFarmers, setLoadingFarmers] = useState(false);
+  const [farmerError, setFarmerError] = useState(null);
+  const [allUsers, setAllUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState(null);
+  
+  // User detail modal state
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userDetails, setUserDetails] = useState(null);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
+  const [userDetailsError, setUserDetailsError] = useState(null);
+  
+  // Suspend user modal state
+  const [suspendModal, setSuspendModal] = useState({ open: false, user: null });
+  const [suspendLoading, setSuspendLoading] = useState(false);
 
-  // Mock Data for Admin Tables
-  const usersList = [
-    { id: 1, name: 'Alice Nkam', email: 'alice@example.com', role: 'Consumer', status: 'Active', joined: 'Feb 2024' },
-    { id: 2, name: 'John Doe', email: 'john@example.com', role: 'Farmer', status: 'Pending', joined: 'Mar 2024' },
-    { id: 3, name: 'Marie Nguema', email: 'marie@example.com', role: 'Consumer', status: 'Active', joined: 'Jan 2024' },
-    { id: 4, name: 'Jean-Pierre', email: 'jp@farm.com', role: 'Farmer', status: 'Active', joined: 'Dec 2023' },
-    { id: 5, name: 'Suspended User', email: 'bad@actor.com', role: 'Consumer', status: 'Suspended', joined: 'Mar 2024' }
-  ];
+  // Add admin modal state
+  const [addAdminModal, setAddAdminModal] = useState(false);
+  const [selectedAdminUserId, setSelectedAdminUserId] = useState('');
+  const [adminLoading, setAdminLoading] = useState(false);
+
+  // User search + selection
+  const [userSearch, setUserSearch] = useState('');
+
+  // Edit profile modal state
+  const [editProfileModal, setEditProfileModal] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editData, setEditData] = useState({
+    full_name: user?.full_name || '',
+    email: user?.email || '',
+    phone: user?.phone || ''
+  });
+
+  // Farmer action handlers
+  const [farmerAction, setFarmerAction] = useState(null); // { type: 'approve'|'reject', farmer: {} }
+
+  // Fetch all users from backend
+  React.useEffect(() => {
+    const fetchAllUsers = async () => {
+      setLoadingUsers(true);
+      setUsersError(null);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(API_ENDPOINTS.ADMIN_USERS, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch users');
+        }
+
+        const data = await response.json();
+        console.log('👥 All users fetched:', data);
+        setAllUsers(data.data?.users || []);
+      } catch (error) {
+        console.error('❌ Error fetching users:', error);
+        setUsersError(error.message);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    // Only fetch if user is admin
+    if (user?.role === 'admin') {
+      fetchAllUsers();
+    }
+  }, [user?.role]);
+
+  // View user details
+  const handleViewUserDetails = async (userId) => {
+    setSelectedUser(userId);
+    setUserDetails(null);
+    setLoadingUserDetails(true);
+    setUserDetailsError(null);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_ENDPOINTS.ADMIN_USERS}/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch user details');
+      }
+
+      const data = await response.json();
+      console.log('👤 User details fetched:', data);
+      setUserDetails(data.data);
+    } catch (error) {
+      console.error('❌ Error fetching user details:', error);
+      setUserDetailsError(error.message);
+    } finally {
+      setLoadingUserDetails(false);
+    }
+  };
+
+  // Handle suspend user
+  const handleSuspendUser = (user) => {
+    setSuspendModal({ open: true, user });
+  };
+
+  // Submit suspend user
+  const submitSuspendUser = async () => {
+    if (!suspendModal.user) return;
+    
+    setSuspendLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_ENDPOINTS.ADMIN_USERS}/${suspendModal.user.id}/suspend`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to suspend user');
+      }
+
+      const data = await response.json();
+      console.log('✅ User suspended:', data);
+      
+      // Update users list
+      setAllUsers(allUsers.map(u => 
+        u.id === suspendModal.user.id 
+          ? { ...u, suspended: true }
+          : u
+      ));
+
+      // Close modal
+      setSuspendModal({ open: false, user: null });
+      
+      alert(`${suspendModal.user.full_name} has been suspended`);
+    } catch (error) {
+      console.error('❌ Error suspending user:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setSuspendLoading(false);
+    }
+  };
+
+  // Handle approve farmer
+  const handleApproveFarmer = async (farmer) => {
+    setFarmerAction({ type: 'approve', farmer });
+  };
+
+  const submitApproveFarmer = async () => {
+    if (!farmerAction?.farmer) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_ENDPOINTS.ADMIN_APPROVE_FARMER}/${farmerAction.farmer.id}/approve`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to approve farmer');
+      }
+
+      console.log('✅ Farmer approved');
+      setPendingFarmers(pendingFarmers.filter(f => f.id !== farmerAction.farmer.id));
+      setFarmerAction(null);
+      alert(`${farmerAction.farmer.full_name} has been approved`);
+    } catch (error) {
+      console.error('❌ Error approving farmer:', error);
+      alert(`Error: ${error.message}`);
+    }
+  };
+
+  // Handle reject farmer
+  const handleRejectFarmer = async (farmer) => {
+    setFarmerAction({ type: 'reject', farmer });
+  };
+
+  const submitRejectFarmer = async () => {
+    if (!farmerAction?.farmer) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_ENDPOINTS.ADMIN_REJECT_FARMER}/${farmerAction.farmer.id}/reject`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to reject farmer');
+      }
+
+      console.log('✅ Farmer rejected');
+      setPendingFarmers(pendingFarmers.filter(f => f.id !== farmerAction.farmer.id));
+      setFarmerAction(null);
+      alert(`${farmerAction.farmer.full_name} has been rejected`);
+    } catch (error) {
+      console.error('❌ Error rejecting farmer:', error);
+      alert(`Error: ${error.message}`);
+    }
+  };
+
+  // Handle add admin
+  const handleAddAdmin = async () => {
+    if (!selectedAdminUserId) {
+      alert('Please select a user to promote');
+      return;
+    }
+
+    setAdminLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_ENDPOINTS.ADMIN_USERS}/${selectedAdminUserId}/promote`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add admin');
+      }
+
+      const data = await response.json();
+      console.log('✅ Admin added:', data);
+      setAllUsers(allUsers.map(u => 
+        u.id === selectedAdminUserId
+          ? { ...u, role: 'admin', approved: true }
+          : u
+      ));
+      setAddAdminModal(false);
+      setSelectedAdminUserId('');
+      alert(`${selectedAdminUser?.full_name || 'User'} is now an admin`);
+    } catch (error) {
+      console.error('❌ Error adding admin:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    if (window.confirm('Are you sure you want to logout?')) {
+      logout();
+      navigate('/login');
+    }
+  };
+
+  // Handle edit profile
+  const handleEditProfile = async () => {
+    setEditLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(API_ENDPOINTS.PROFILE, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(editData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+
+      console.log('✅ Profile updated');
+      setEditProfileModal(false);
+      alert('Profile has been updated successfully');
+    } catch (error) {
+      console.error('❌ Error updating profile:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // Fetch pending farmers from backend
+  React.useEffect(() => {
+    const fetchPendingFarmers = async () => {
+      setLoadingFarmers(true);
+      setFarmerError(null);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(API_ENDPOINTS.ADMIN_PENDING_FARMERS, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch pending farmers');
+        }
+
+        const data = await response.json();
+        console.log('📋 Pending farmers fetched:', data);
+        setPendingFarmers(data.data?.farmers || []);
+      } catch (error) {
+        console.error('❌ Error fetching pending farmers:', error);
+        setFarmerError(error.message);
+      } finally {
+        setLoadingFarmers(false);
+      }
+    };
+
+    // Only fetch if user is admin
+    if (user?.role === 'admin') {
+      fetchPendingFarmers();
+    }
+  }, [user?.role]);
 
   const transactionsList = [
     { id: 'TRX-9901', user: 'Alice Nkam', type: 'Order Payment', amount: '15,000 FCFA', status: 'Completed', date: 'Today, 10:30 AM' },
@@ -50,6 +374,18 @@ const AdminDashboard = () => {
     { id: 'TRX-9903', user: 'Marie Nguema', type: 'Order Payment', amount: '8,200 FCFA', status: 'Completed', date: '2 days ago' },
     { id: 'TRX-9904', user: 'System', type: 'Refund', amount: '2,500 FCFA', status: 'Completed', date: 'Last week' }
   ];
+
+  const normalizedUserSearch = userSearch.trim().toLowerCase();
+  const filteredUsers = allUsers.filter((u) => {
+    if (!normalizedUserSearch) return true;
+    return (
+      (u.full_name || '').toLowerCase().includes(normalizedUserSearch) ||
+      (u.phone || '').toLowerCase().includes(normalizedUserSearch) ||
+      (u.role || '').toLowerCase().includes(normalizedUserSearch)
+    );
+  });
+  const adminEligibleUsers = allUsers.filter((u) => u.role !== 'admin');
+  const selectedAdminUser = allUsers.find((u) => u.id === selectedAdminUserId);
 
   // Animation variants
   const fadeIn = {
@@ -100,30 +436,30 @@ const AdminDashboard = () => {
         <StatCard
           icon={<FaUsers size={20} />}
           label="Total Users"
-          value={adminSummary.totalUsers}
+          value={allUsers.length}
           trend={15.2}
           color="from-blue-500 to-blue-700"
         />
         <StatCard
           icon={<FaTractor size={20} />}
           label="Farmers"
-          value={adminSummary.farmers}
+          value={allUsers.filter(u => u.role === 'farmer').length}
           trend={8.5}
           color="from-[var(--primary-500)] to-[var(--primary-700)]"
         />
         <StatCard
-          icon={<FaShoppingCart size={20} />}
-          label="Active Orders"
-          value={adminSummary.activeOrders}
+          icon={<FaCheckCircle size={20} />}
+          label="Customers"
+          value={allUsers.filter(u => u.role === 'customer').length}
           trend={12.0}
           color="from-[var(--secondary-500)] to-[var(--secondary-700)]"
         />
         <StatCard
-          icon={<FaMoneyBillWave size={20} />}
-          label="Monthly Volume"
-          value={adminSummary.monthlyVolume}
-          trend={24.5}
-          color="from-[var(--accent-500)] to-[var(--accent-700)]"
+          icon={<FaBan size={20} />}
+          label="Suspended"
+          value={allUsers.filter(u => u.suspended).length}
+          trend={-2.5}
+          color="from-red-500 to-red-700"
         />
       </div>
 
@@ -185,117 +521,218 @@ const AdminDashboard = () => {
   const renderUsers = () => (
     <motion.div {...fadeIn} className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">User Management</h3>
+        <h3 className="text-lg font-bold text-[var(--text-primary)]">User Management ({filteredUsers.length} of {allUsers.length})</h3>
         <div className="flex gap-2 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               placeholder="Search users..."
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)]"
             />
           </div>
-          <button className="px-4 py-2 bg-[var(--primary-500)] text-white rounded-lg font-medium hover:bg-[var(--primary-600)]">
+          <button 
+            onClick={() => setAddAdminModal(true)}
+            className="px-4 py-2 bg-[var(--primary-500)] text-white rounded-lg font-medium hover:bg-[var(--primary-600)]">
             <FaUserShield className="inline mr-2" /> Add Admin
           </button>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
-              <th className="pb-3 font-medium">User</th>
-              <th className="pb-3 font-medium">Role</th>
-              <th className="pb-3 font-medium">Status</th>
-              <th className="pb-3 font-medium">Joined</th>
-              <th className="pb-3 font-medium text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="text-sm">
-            {usersList.map((user) => (
-              <tr key={user.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
-                <td className="py-4">
-                  <div>
-                    <p className="font-bold text-[var(--text-primary)]">{user.name}</p>
-                    <p className="text-xs text-[var(--text-tertiary)]">{user.email}</p>
-                  </div>
-                </td>
-                <td className="py-4">
-                  <span className={`px-2 py-1 rounded text-xs font-bold border ${user.role === 'Farmer' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'
-                    }`}>
-                    {user.role}
-                  </span>
-                </td>
-                <td className="py-4">
-                  <span className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit ${user.status === 'Active' ? 'bg-green-100 text-green-700' :
-                      user.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                    }`}>
-                    {user.status === 'Active' && <FaCheckCircle size={10} />}
-                    {user.status === 'Pending' && <FaExclamationTriangle size={10} />}
-                    {user.status === 'Suspended' && <FaBan size={10} />}
-                    {user.status}
-                  </span>
-                </td>
-                <td className="py-4 text-[var(--text-secondary)]">{user.joined}</td>
-                <td className="py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button className="p-2 text-[var(--text-secondary)] hover:text-[var(--primary-600)] hover:bg-gray-100 rounded-lg">
-                      <FaEdit />
-                    </button>
-                    <button className="p-2 text-[var(--text-secondary)] hover:text-red-600 hover:bg-red-50 rounded-lg">
-                      <FaBan />
-                    </button>
-                  </div>
-                </td>
+
+      {loadingUsers ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--primary-600)]"></div>
+        </div>
+      ) : usersError ? (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          ❌ Error loading users: {usersError}
+        </div>
+      ) : filteredUsers.length === 0 ? (
+        <div className="text-center py-12 text-[var(--text-secondary)]">
+          <FaUsers size={48} className="mx-auto mb-4 opacity-20" />
+          <p>No users found</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
+                <th className="pb-3 font-medium">User</th>
+                <th className="pb-3 font-medium">Phone</th>
+                <th className="pb-3 font-medium">Role</th>
+                <th className="pb-3 font-medium">Status</th>
+                <th className="pb-3 font-medium">Joined</th>
+                <th className="pb-3 font-medium text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="text-sm">
+              {filteredUsers.map((userItem) => (
+                <tr
+                  key={userItem.id}
+                  onClick={() => handleViewUserDetails(userItem.id)}
+                  className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer"
+                >
+                  <td className="py-4">
+                    <p className="font-bold text-[var(--text-primary)]">{userItem.full_name || 'Unknown'}</p>
+                  </td>
+                  <td className="py-4 text-[var(--text-secondary)]">{userItem.phone || 'N/A'}</td>
+                  <td className="py-4">
+                    <span className={`px-2 py-1 rounded text-xs font-bold border ${
+                      userItem.role === 'farmer' ? 'bg-green-50 text-green-700 border-green-200' : 
+                      userItem.role === 'admin' ? 'bg-red-50 text-red-700 border-red-200' :
+                      'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}>
+                      {userItem.role?.charAt(0).toUpperCase() + userItem.role?.slice(1) || 'Customer'}
+                    </span>
+                  </td>
+                  <td className="py-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit ${
+                      userItem.suspended ? 'bg-red-100 text-red-700' :
+                      userItem.approved ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {userItem.suspended ? (
+                        <>
+                          <FaBan size={10} />
+                          Suspended
+                        </>
+                      ) : userItem.approved ? (
+                        <>
+                          <FaCheckCircle size={10} />
+                          Active
+                        </>
+                      ) : (
+                        <>
+                          <FaExclamationTriangle size={10} />
+                          Pending
+                        </>
+                      )}
+                    </span>
+                  </td>
+                  <td className="py-4 text-[var(--text-secondary)]">
+                    {new Date(userItem.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </td>
+                  <td className="py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewUserDetails(userItem.id);
+                        }}
+                        className="p-2 text-[var(--text-secondary)] hover:text-[var(--primary-600)] hover:bg-gray-100 rounded-lg" 
+                        title="View details"
+                      >
+                        <FaEdit />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (userItem.role !== 'admin') {
+                            setSelectedAdminUserId(userItem.id);
+                            setAddAdminModal(true);
+                          }
+                        }}
+                        disabled={userItem.role === 'admin'}
+                        className={`p-2 rounded-lg transition-colors ${
+                          userItem.role === 'admin'
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : 'text-[var(--text-secondary)] hover:text-[var(--primary-600)] hover:bg-blue-50'
+                        }`}
+                        title={userItem.role === 'admin' ? 'Already an admin' : 'Make admin'}
+                      >
+                        <FaUserShield />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSuspendUser(userItem);
+                        }}
+                        disabled={userItem.suspended}
+                        className={`p-2 rounded-lg transition-colors ${
+                          userItem.suspended 
+                            ? 'text-gray-400 cursor-not-allowed' 
+                            : 'text-[var(--text-secondary)] hover:text-red-600 hover:bg-red-50'
+                        }`}
+                        title={userItem.suspended ? 'User already suspended' : 'Suspend user'}
+                      >
+                        <FaBan />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </motion.div>
   );
 
   const renderFarmers = () => (
     <motion.div {...fadeIn} className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">Farmer Status</h3>
+        <div>
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Pending Farmers</h3>
+          <p className="text-sm text-[var(--text-secondary)]">{pendingFarmers.length} awaiting approval</p>
+        </div>
         <button className="text-sm text-[var(--primary-600)] font-medium">Export List</button>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
-              <th className="pb-3 font-medium">Farm Name</th>
-              <th className="pb-3 font-medium">Region</th>
-              <th className="pb-3 font-medium">Revenue</th>
-              <th className="pb-3 font-medium">Verification</th>
-              <th className="pb-3 font-medium text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="text-sm">
-            {usersList.filter(u => u.role === 'Farmer').concat([
-              { id: 101, name: 'Ferme Bio Mballa', role: 'Farmer', email: 'contact@mballa.cm', status: 'Active', joined: '2023' },
-              { id: 102, name: 'Les Jardins de Mama', role: 'Farmer', email: 'mama@jardins.cm', status: 'Active', joined: '2023' }
-            ]).slice(0, 5).map((farmer) => (
-              <tr key={farmer.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
-                <td className="py-4 font-bold text-[var(--text-primary)]">{farmer.name}</td>
-                <td className="py-4 text-[var(--text-secondary)]">Region Info</td>
-                <td className="py-4 font-medium text-[var(--primary-600)]">-</td>
-                <td className="py-4">
-                  {farmer.status === 'Active' ? (
-                    <span className="text-green-600 flex items-center gap-1 text-xs font-bold"><FaCheckCircle /> Verified</span>
-                  ) : (
-                    <span className="text-yellow-600 flex items-center gap-1 text-xs font-bold"><FaExclamationTriangle /> Pending</span>
-                  )}
-                </td>
-                <td className="py-4 text-right">
-                  <button className="px-3 py-1 border rounded hover:bg-gray-50 text-xs font-medium">Review</button>
-                </td>
+
+      {farmerError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          ❌ {farmerError}
+        </div>
+      )}
+
+      {loadingFarmers ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="w-8 h-8 border-4 border-[var(--primary-200)] border-t-[var(--primary-500)] rounded-full animate-spin" />
+        </div>
+      ) : pendingFarmers.length === 0 ? (
+        <div className="text-center py-8 text-[var(--text-secondary)]">
+          <FaCheckCircle size={32} className="mx-auto mb-3 text-green-500" />
+          <p>No pending farmers! All farmers have been reviewed.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
+                <th className="pb-3 font-medium">Farmer Name</th>
+                <th className="pb-3 font-medium">Email</th>
+                <th className="pb-3 font-medium">Phone</th>
+                <th className="pb-3 font-medium">Applied</th>
+                <th className="pb-3 font-medium text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="text-sm">
+              {pendingFarmers.map((farmer) => (
+                <tr key={farmer.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
+                  <td className="py-4 font-bold text-[var(--text-primary)]">{farmer.full_name}</td>
+                  <td className="py-4 text-[var(--text-secondary)]">{farmer.email || 'N/A'}</td>
+                  <td className="py-4 text-[var(--text-secondary)]">{farmer.phone || 'N/A'}</td>
+                  <td className="py-4 text-xs text-[var(--text-tertiary)]">
+                    {new Date(farmer.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="py-4 text-right flex gap-2 justify-end">
+                    <button 
+                      onClick={() => handleApproveFarmer(farmer)}
+                      className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-xs font-medium flex items-center gap-1 transition-colors">
+                      <FaCheckCircle size={12} /> Approve
+                    </button>
+                    <button 
+                      onClick={() => handleRejectFarmer(farmer)}
+                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-xs font-medium flex items-center gap-1 transition-colors">
+                      <FaTimesCircle size={12} /> Reject
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </motion.div>
   );
 
@@ -343,43 +780,610 @@ const AdminDashboard = () => {
   );
 
   const renderSettings = () => (
-    <motion.div {...fadeIn} className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-8">
-      <h3 className="text-xl font-bold text-[var(--text-primary)] mb-6">Platform Settings</h3>
-      <form className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Input label="Site Name" defaultValue="AgriConnect Marketplace" />
-          <Input label="Support Email" defaultValue="support@agriconnect.cm" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Input label="Platform Fee (%)" type="number" defaultValue="5" />
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-[var(--text-secondary)]">Currency</label>
-            <select className="px-4 py-3 rounded-xl border-2 border-[var(--border-color)] bg-white outline-none">
-              <option>FCFA (XAF)</option>
-              <option>USD ($)</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="pt-4 border-t border-[var(--border-light)] mt-4">
-          <h4 className="font-bold text-[var(--text-primary)] mb-4">Security Settings</h4>
-          <div className="flex items-center gap-2 mb-4">
-            <input type="checkbox" id="2fa" className="w-5 h-5 accent-[var(--primary-600)]" defaultChecked />
-            <label htmlFor="2fa" className="text-sm text-[var(--text-primary)]">Require 2FA for Admin accounts</label>
-          </div>
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="verify" className="w-5 h-5 accent-[var(--primary-600)]" defaultChecked />
-            <label htmlFor="verify" className="text-sm text-[var(--text-primary)]">Manual verification for new Farmers</label>
-          </div>
-        </div>
-
-        <div className="pt-6">
-          <button type="button" className="px-8 py-3 bg-[var(--primary-500)] text-white font-bold rounded-xl hover:bg-[var(--primary-600)] transition-all">
-            Save Configuration
+    <motion.div {...fadeIn} className="max-w-3xl mx-auto space-y-6">
+      {/* Admin Profile Card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-[var(--text-primary)]">Admin Profile</h3>
+          <button 
+            onClick={() => setEditProfileModal(true)}
+            className="px-4 py-2 bg-[var(--primary-500)] text-white rounded-lg font-medium hover:bg-[var(--primary-600)] flex items-center gap-2">
+            <FaEdit size={14} /> Edit Profile
           </button>
         </div>
-      </form>
+        <div className="flex items-center gap-6 mb-6">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-600)] flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+            {user?.full_name?.charAt(0) || 'A'}
+          </div>
+          <div>
+            <h4 className="text-lg font-bold text-[var(--text-primary)]">{user?.full_name || 'Administrator'}</h4>
+            <p className="text-[var(--text-secondary)]">{user?.email || 'admin@agriconnect.cm'}</p>
+            <span className="inline-block mt-2 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
+              Administrator
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Platform Settings */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-8">
+        <h3 className="text-xl font-bold text-[var(--text-primary)] mb-6">Platform Settings</h3>
+        <form className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input label="Site Name" defaultValue="AgriConnect Marketplace" />
+            <Input label="Support Email" defaultValue="support@agriconnect.cm" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input label="Platform Fee (%)" type="number" defaultValue="5" />
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-[var(--text-secondary)]">Currency</label>
+              <select className="px-4 py-3 rounded-xl border-2 border-[var(--border-color)] bg-white outline-none">
+                <option>FCFA (XAF)</option>
+                <option>USD ($)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-[var(--border-light)] mt-4">
+            <h4 className="font-bold text-[var(--text-primary)] mb-4">Security Settings</h4>
+            <div className="flex items-center gap-2 mb-4">
+              <input type="checkbox" id="2fa" className="w-5 h-5 accent-[var(--primary-600)]" defaultChecked />
+              <label htmlFor="2fa" className="text-sm text-[var(--text-primary)]">Require 2FA for Admin accounts</label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="verify" className="w-5 h-5 accent-[var(--primary-600)]" defaultChecked />
+              <label htmlFor="verify" className="text-sm text-[var(--text-primary)]">Manual verification for new Farmers</label>
+            </div>
+          </div>
+
+          <div className="pt-6">
+            <button type="button" className="px-8 py-3 bg-[var(--primary-500)] text-white font-bold rounded-xl hover:bg-[var(--primary-600)] transition-all">
+              Save Configuration
+            </button>
+          </div>
+        </form>
+      </div>
     </motion.div>
+  );
+
+  // User Details Modal
+  const UserDetailsModal = () => (
+    <AnimatePresence>
+      {selectedUser && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setSelectedUser(null);
+            setUserDetails(null);
+            setUserDetailsError(null);
+          }}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-white p-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                  <FaUsers size={24} />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">User Details</h2>
+                  <p className="text-sm text-[var(--primary-100)]">Complete profile information</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedUser(null);
+                  setUserDetails(null);
+                  setUserDetailsError(null);
+                }}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            {loadingUserDetails ? (
+              <div className="flex flex-col items-center justify-center py-16">
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-[var(--primary-200)] border-t-[var(--primary-600)] mb-4"></div>
+                <p className="text-[var(--text-secondary)] font-medium">Loading user details...</p>
+              </div>
+            ) : userDetailsError ? (
+              <div className="p-6">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                  ❌ {userDetailsError}
+                </div>
+              </div>
+            ) : userDetails ? (
+              <div className="p-6 space-y-6">
+                {/* Profile Section */}
+                <div>
+                  <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                    <FaUserShield className="text-[var(--primary-600)]" />
+                    Profile Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
+                      <p className="text-xs text-blue-700 font-bold uppercase tracking-wide">Name</p>
+                      <p className="text-lg font-bold text-[var(--text-primary)] mt-1">{userDetails.profile?.full_name || 'N/A'}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl border border-purple-200">
+                      <p className="text-xs text-purple-700 font-bold uppercase tracking-wide">Role</p>
+                      <p className="text-lg font-bold text-[var(--text-primary)] capitalize mt-1">{userDetails.profile?.role || 'N/A'}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
+                      <p className="text-xs text-green-700 font-bold uppercase tracking-wide">Phone</p>
+                      <p className="text-lg font-bold text-[var(--text-primary)] mt-1">{userDetails.profile?.phone || 'N/A'}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-xl border border-orange-200">
+                      <p className="text-xs text-orange-700 font-bold uppercase tracking-wide">Status</p>
+                      <p className="text-lg font-bold text-[var(--text-primary)] capitalize mt-1">
+                        {userDetails.profile?.suspended ? '🚫 Suspended' : userDetails.profile?.approved ? '✅ Active' : '⏳ Pending'}
+                      </p>
+                    </div>
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200 md:col-span-2">
+                      <p className="text-xs text-gray-700 font-bold uppercase tracking-wide">Member Since</p>
+                      <p className="text-lg font-bold text-[var(--text-primary)] mt-1">
+                        {new Date(userDetails.profile?.created_at).toLocaleDateString('en-US', { 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Summary Stats */}
+                <div>
+                  <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                    <FaChartLine className="text-[var(--primary-600)]" />
+                    Activity Summary
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-4 rounded-xl text-center shadow-lg">
+                      <p className="text-3xl font-bold text-white">{userDetails.summary?.totalOrders || 0}</p>
+                      <p className="text-xs text-blue-100 font-medium mt-1">Orders</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-green-500 to-green-600 p-4 rounded-xl text-center shadow-lg">
+                      <p className="text-3xl font-bold text-white">{userDetails.summary?.totalProducts || 0}</p>
+                      <p className="text-xs text-green-100 font-medium mt-1">Products</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-4 rounded-xl text-center shadow-lg">
+                      <p className="text-3xl font-bold text-white">{userDetails.summary?.totalReviews || 0}</p>
+                      <p className="text-xs text-orange-100 font-medium mt-1">Reviews</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-4 rounded-xl text-center shadow-lg">
+                      <p className="text-3xl font-bold text-white">{userDetails.summary?.totalFavorites || 0}</p>
+                      <p className="text-xs text-purple-100 font-medium mt-1">Favorites</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent Orders */}
+                {userDetails.orders && userDetails.orders.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                      <FaShoppingCart className="text-[var(--primary-600)]" />
+                      Recent Orders
+                    </h3>
+                    <div className="space-y-2">
+                      {userDetails.orders.slice(0, 3).map((order) => (
+                        <div key={order.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 hover:shadow-md transition-shadow">
+                          <div>
+                            <p className="text-sm font-bold text-[var(--text-primary)]">Order #{order.id.slice(0, 8)}</p>
+                            <p className="text-xs text-[var(--text-secondary)] mt-1">{new Date(order.created_at).toLocaleDateString()}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-[var(--primary-600)]">${order.total_amount}</p>
+                            <p className="text-xs text-[var(--text-secondary)] capitalize font-medium">{order.status}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  // Suspend User Modal
+  const SuspendUserModal = () => (
+    <AnimatePresence>
+      {suspendModal.open && (
+        <motion.div
+          key="suspend-modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setSuspendModal({ open: false, user: null })}
+        >
+          <motion.div
+            key="suspend-modal-content"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-600 to-red-700 text-white p-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-red-500/30 flex items-center justify-center">
+                  <FaBan size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Suspend User</h2>
+                  <p className="text-sm text-red-100">This action can be reversed</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-[var(--text-secondary)] text-sm">
+                  You are about to suspend <span className="font-bold text-red-700">{suspendModal.user?.full_name}</span>
+                </p>
+                <p className="text-[var(--text-secondary)] text-sm mt-2">
+                  Suspended users will be unable to log in or access the platform.
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
+              <button
+                onClick={() => setSuspendModal({ open: false, user: null })}
+                disabled={suspendLoading}
+                className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitSuspendUser}
+                disabled={suspendLoading}
+                className="px-6 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {suspendLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Suspending...
+                  </>
+                ) : (
+                  <>
+                    <FaBan size={16} />
+                    Suspend User
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  // Add Admin Modal
+  const AddAdminModal = () => (
+    <AnimatePresence>
+      {addAdminModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setAddAdminModal(false);
+            setSelectedAdminUserId('');
+          }}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-white p-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                  <FaUserShield size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Add New Admin</h2>
+                  <p className="text-sm text-[var(--primary-100)]">Grant administrator access</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  Select a user to promote to admin.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
+                  User
+                </label>
+                <select
+                  value={selectedAdminUserId}
+                  onChange={(e) => setSelectedAdminUserId(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm bg-white"
+                >
+                  <option value="">Select user</option>
+                  {adminEligibleUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name || 'Unknown'} • {u.phone || 'No phone'} • {u.role || 'user'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedAdminUser ? (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-secondary)] font-medium">Name:</span>
+                    <span className="font-bold text-[var(--text-primary)]">{selectedAdminUser.full_name || 'Unknown'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-secondary)] font-medium">Role:</span>
+                    <span className="font-bold text-[var(--text-primary)] capitalize">{selectedAdminUser.role || 'customer'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-secondary)] font-medium">Phone:</span>
+                    <span className="font-bold text-[var(--text-primary)]">{selectedAdminUser.phone || 'N/A'}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-[var(--text-secondary)]">No user selected</div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setAddAdminModal(false);
+                  setSelectedAdminUserId('');
+                }}
+                disabled={adminLoading}
+                className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddAdmin}
+                disabled={adminLoading || !selectedAdminUserId}
+                className="px-6 py-2 bg-[var(--primary-500)] text-white rounded-lg font-bold hover:bg-[var(--primary-600)] transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {adminLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <FaUserShield size={16} />
+                    Add Admin
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  // Edit Profile Modal
+  const EditProfileModal = () => (
+    <AnimatePresence>
+      {editProfileModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setEditProfileModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-white p-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                  <FaEdit size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Edit Profile</h2>
+                  <p className="text-sm text-[var(--primary-100)]">Update your information</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={editData.full_name}
+                  onChange={(e) => setEditData({...editData, full_name: e.target.value})}
+                  className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={editData.email}
+                  onChange={(e) => setEditData({...editData, email: e.target.value})}
+                  className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  value={editData.phone}
+                  onChange={(e) => setEditData({...editData, phone: e.target.value})}
+                  className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
+              <button
+                onClick={() => setEditProfileModal(false)}
+                disabled={editLoading}
+                className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditProfile}
+                disabled={editLoading}
+                className="px-6 py-2 bg-[var(--primary-500)] text-white rounded-lg font-bold hover:bg-[var(--primary-600)] transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {editLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <FaCheckCircle size={16} />
+                    Save Changes
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  // Farmer Action Modal
+  const FarmerActionModal = () => (
+    <AnimatePresence>
+      {farmerAction && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setFarmerAction(null)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className={`bg-gradient-to-r ${farmerAction.type === 'approve' ? 'from-green-600 to-green-700' : 'from-red-600 to-red-700'} text-white p-6`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-full ${farmerAction.type === 'approve' ? 'bg-green-500/30' : 'bg-red-500/30'} flex items-center justify-center`}>
+                  {farmerAction.type === 'approve' ? <FaCheckCircle size={24} /> : <FaTimesCircle size={24} />}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">
+                    {farmerAction.type === 'approve' ? 'Approve Farmer' : 'Reject Farmer'}
+                  </h2>
+                  <p className="text-sm opacity-90">Confirm this action</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className={`${farmerAction.type === 'approve' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} border rounded-lg p-4`}>
+                <p className="text-sm">
+                  You are about to <span className="font-bold">{farmerAction.type === 'approve' ? 'approve' : 'reject'}</span> <span className="font-bold text-[var(--text-primary)]">{farmerAction.farmer?.full_name}</span> as a farmer.
+                </p>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between text-sm border-b border-gray-200 pb-2">
+                  <span className="text-[var(--text-secondary)] font-medium">Full Name:</span>
+                  <span className="font-bold text-[var(--text-primary)]">{farmerAction.farmer?.full_name}</span>
+                </div>
+                <div className="flex justify-between text-sm border-b border-gray-200 pb-2">
+                  <span className="text-[var(--text-secondary)] font-medium">Phone:</span>
+                  <span className="font-bold text-[var(--text-primary)]">{farmerAction.farmer?.phone || 'Not provided'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--text-secondary)] font-medium">Applied On:</span>
+                  <span className="font-bold text-[var(--text-primary)]">{new Date(farmerAction.farmer?.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
+              <button
+                onClick={() => setFarmerAction(null)}
+                className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={farmerAction.type === 'approve' ? submitApproveFarmer : submitRejectFarmer}
+                className={`px-6 py-2 ${farmerAction.type === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white rounded-lg font-bold transition-colors flex items-center gap-2`}
+              >
+                {farmerAction.type === 'approve' ? (
+                  <>
+                    <FaCheckCircle size={16} />
+                    Approve
+                  </>
+                ) : (
+                  <>
+                    <FaTimesCircle size={16} />
+                    Reject
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 
   return (
@@ -391,11 +1395,11 @@ const AdminDashboard = () => {
           {/* Sidebar */}
           <div className={`flex-shrink-0 w-full md:w-64 bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-4 h-fit sticky top-24 transition-all ${isSidebarOpen ? 'block' : 'hidden md:block'}`}>
             <div className="flex items-center gap-3 px-4 py-4 mb-4 border-b border-[var(--border-light)]">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600">
-                <FaUserShield size={20} />
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-600)] flex items-center justify-center text-white font-bold text-sm">
+                {user?.full_name?.charAt(0) || 'A'}
               </div>
               <div>
-                <h3 className="font-bold text-[var(--text-primary)] text-sm">Administrator</h3>
+                <h3 className="font-bold text-[var(--text-primary)] text-sm">{user?.full_name || 'Administrator'}</h3>
                 <p className="text-xs text-[var(--text-secondary)]">Super Admin</p>
               </div>
             </div>
@@ -409,7 +1413,9 @@ const AdminDashboard = () => {
             </nav>
 
             <div className="mt-8 pt-4 border-t border-[var(--border-light)]">
-              <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-colors font-medium">
+              <button 
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-colors font-medium">
                 <FaSignOutAlt />
                 <span>Sign Out</span>
               </button>
@@ -428,6 +1434,13 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <UserDetailsModal />
+      <SuspendUserModal />
+      <AddAdminModal />
+      <EditProfileModal />
+      <FarmerActionModal />
 
       <Footer />
     </div>

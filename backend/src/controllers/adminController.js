@@ -1,6 +1,46 @@
 const { supabaseAdmin } = require('../config/supabase');
 
 /**
+ * Get all users
+ * GET /api/admin/users
+ */
+const getAllUsers = async (req, res, next) => {
+  try {
+    console.log('🔍 getAllUsers called by:', req.user?.email);
+    
+    const { data: users, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, phone, role, approved, created_at, updated_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Supabase query error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch users',
+        error: error.message
+      });
+    }
+
+    console.log('✅ Successfully fetched', users?.length || 0, 'users');
+    
+    res.status(200).json({
+      success: true,
+      message: 'Users fetched successfully',
+      data: {
+        users,
+        count: users?.length || 0,
+        farmers: users?.filter(u => u.role === 'farmer')?.length || 0,
+        customers: users?.filter(u => u.role === 'customer')?.length || 0
+      }
+    });
+  } catch (error) {
+    console.error('❌ getAllUsers error:', error);
+    next(error);
+  }
+};
+
+/**
  * Get all pending farmers
  * GET /api/admin/farmers/pending
  */
@@ -299,11 +339,22 @@ const getRevenueAnalytics = async (req, res, next) => {
  * GET /api/admin/analytics/users
  */
 const getUserStatistics = async (req, res, next) => {
-  try {    // Get user counts by role
-    const { data: profiles } = await supabaseAdmin
+  try {
+    // Get all user profiles
+    const { data: profiles, error } = await supabaseAdmin
       .from('profiles')
-      .select('role, approved, created_at');
+      .select('id, full_name, email, phone, role, approved, created_at')
+      .order('created_at', { ascending: false });
 
+    if (error) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch user profiles',
+        error: error.message
+      });
+    }
+
+    // Calculate user statistics
     const userStats = {
       byRole: {
         customer: 0,
@@ -349,10 +400,12 @@ const getUserStatistics = async (req, res, next) => {
       data: {
         ...userStats,
         registrationTrend,
-        totalUsers: profiles?.length || 0
+        totalUsers: profiles?.length || 0,
+        users: profiles || []
       }
     });
-  } catch (error) {    next(error);
+  } catch (error) {
+    next(error);
   }
 };
 
@@ -578,6 +631,354 @@ const getRecentActivity = async (req, res, next) => {
   }
 };
 
+/**
+ * Promote a user to admin role (TEMPORARY - for initial setup)
+ * POST /api/auth/promote-admin
+ * Body: { email, secret }
+ */
+const promoteToAdmin = async (req, res, next) => {
+  try {
+    const { email, secret } = req.body;
+
+    // Simple secret check - you can change this
+    if (secret !== 'ADMIN_SETUP_2026') {
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid secret'
+      });
+    }
+
+    // Get user by email
+    const { data: users, error: fetchError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (fetchError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch users',
+        error: fetchError.message
+      });
+    }
+
+    const user = users.users.find(u => u.email === email);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update profile
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update({ role: 'admin', approved: true })
+      .eq('id', user.id);
+
+    if (profileError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update profile',
+        error: profileError.message
+      });
+    }
+
+    // Update auth metadata
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        ...user.user_metadata,
+        role: 'admin',
+        approved: true
+      }
+    });
+
+    if (authError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update auth metadata',
+        error: authError.message
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'User promoted to admin successfully',
+      data: {
+        id: user.id,
+        email: user.email,
+        role: 'admin'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Promote a user to admin role by user id
+ * PATCH /api/admin/users/:id/promote
+ */
+const promoteUserToAdmin = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, role')
+      .eq('id', userId)
+      .single();
+
+    if (profileError || !profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (profile.role === 'admin') {
+      return res.status(400).json({
+        success: false,
+        message: 'User is already an admin'
+      });
+    }
+
+    const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+
+    if (userError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch auth user',
+        error: userError.message
+      });
+    }
+
+    const existingMetadata = userData?.user?.user_metadata || {};
+
+    const { error: updateProfileError } = await supabaseAdmin
+      .from('profiles')
+      .update({ role: 'admin', approved: true })
+      .eq('id', userId);
+
+    if (updateProfileError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update profile',
+        error: updateProfileError.message
+      });
+    }
+
+    const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: {
+        ...existingMetadata,
+        role: 'admin',
+        approved: true
+      }
+    });
+
+    if (updateAuthError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update auth metadata',
+        error: updateAuthError.message
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'User promoted to admin successfully',
+      data: {
+        id: userId,
+        full_name: profile.full_name,
+        role: 'admin'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get detailed view of a specific user
+ * GET /api/admin/users/:id
+ */
+const viewUserDetails = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    // Get user profile details
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (profileError || !profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Get user's products (if farmer)
+    let products = [];
+    if (profile.role === 'farmer') {
+      const { data: farmerProducts } = await supabaseAdmin
+        .from('products')
+        .select('id, name, price, quantity, category, created_at')
+        .eq('farmer_id', userId);
+      products = farmerProducts || [];
+    }
+
+    // Get user's orders (if customer)
+    let orders = [];
+    if (profile.role === 'customer') {
+      const { data: customerOrders } = await supabaseAdmin
+        .from('orders')
+        .select('id, total_amount, status, payment_status, created_at')
+        .eq('customer_id', userId);
+      orders = customerOrders || [];
+    }
+
+    // Get user's reviews
+    const { data: reviews } = await supabaseAdmin
+      .from('reviews')
+      .select('id, rating, comment, created_at, products (name)')
+      .eq('customer_id', userId);
+
+    // Get user's favorites
+    const { data: favorites } = await supabaseAdmin
+      .from('favorites')
+      .select('id, product_id, created_at, products (name, price)')
+      .eq('customer_id', userId);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        profile,
+        products,
+        orders,
+        reviews: reviews || [],
+        favorites: favorites || [],
+        summary: {
+          totalProducts: products.length,
+          totalOrders: orders.length,
+          totalReviews: reviews?.length || 0,
+          totalFavorites: favorites?.length || 0
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ viewUserDetails error:', error);
+    next(error);
+  }
+};
+
+/**
+ * Suspend a user (set suspended flag)
+ * PATCH /api/admin/users/:id/suspend
+ */
+const suspendUser = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    const { reason = '' } = req.body || {};
+
+    // Check if user exists
+    const { data: profile, error: fetchError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, role, suspended')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError || !profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update profile with suspended flag
+    const { data: updatedProfile, error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ 
+        suspended: true
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to suspend user',
+        error: updateError.message
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `${profile.full_name} has been suspended`,
+      data: {
+        user: updatedProfile
+      }
+    });
+  } catch (error) {
+    console.error('❌ suspendUser error:', error);
+    next(error);
+  }
+};
+
+/**
+ * Unsuspend a user
+ * PATCH /api/admin/users/:id/unsuspend
+ */
+const unsuspendUser = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    // Check if user exists
+    const { data: profile, error: fetchError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError || !profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update profile to unsuspend
+    const { data: updatedProfile, error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ 
+        suspended: false
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to unsuspend user',
+        error: updateError.message
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `${profile.full_name} has been unsuspended`,
+      data: {
+        user: updatedProfile
+      }
+    });
+  } catch (error) {
+    console.error('❌ unsuspendUser error:', error);
+    next(error);
+  }
+};
+
 module.exports = {
   getPendingFarmers,
   approveFarmer,
@@ -587,6 +988,12 @@ module.exports = {
   getUserStatistics,
   getProductStatistics,
   getOrderStatistics,
-  getRecentActivity
+  getRecentActivity,
+  getAllUsers,
+  promoteToAdmin,
+  promoteUserToAdmin,
+  viewUserDetails,
+  suspendUser,
+  unsuspendUser
 };
 

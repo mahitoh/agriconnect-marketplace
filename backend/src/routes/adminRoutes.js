@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticate, authorizeRole } = require('../middleware/auth');
 const {
+  getAllUsers,
   getPendingFarmers,
   approveFarmer,
   rejectFarmer,
@@ -9,13 +10,23 @@ const {
   getUserStatistics,
   getProductStatistics,
   getOrderStatistics,
-  getRecentActivity
+  getRecentActivity,
+  viewUserDetails,
+  suspendUser,
+  unsuspendUser,
+  promoteUserToAdmin
 } = require('../controllers/adminController');
 
 const router = express.Router();
 
 // All admin routes require authentication + admin role
 router.use(authenticate, authorizeRole('admin'));
+
+/**
+ * GET /api/admin/users
+ * Get all users (farmers and customers)
+ */
+router.get('/users', getAllUsers);
 
 /**
  * GET /api/admin/farmers/pending
@@ -70,6 +81,30 @@ router.get('/analytics/orders', getOrderStatistics);
  * Get recent platform activity
  */
 router.get('/analytics/activity', getRecentActivity);
+
+/**
+ * GET /api/admin/users/:id
+ * Get detailed view of a specific user
+ */
+router.get('/users/:id', viewUserDetails);
+
+/**
+ * PATCH /api/admin/users/:id/suspend
+ * Suspend a user
+ */
+router.patch('/users/:id/suspend', suspendUser);
+
+/**
+ * PATCH /api/admin/users/:id/unsuspend
+ * Unsuspend a user
+ */
+router.patch('/users/:id/unsuspend', unsuspendUser);
+
+/**
+ * PATCH /api/admin/users/:id/promote
+ * Promote a user to admin
+ */
+router.patch('/users/:id/promote', promoteUserToAdmin);
 
 module.exports = router;
 

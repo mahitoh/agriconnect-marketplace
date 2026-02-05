@@ -1,16 +1,93 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaSearch, FaMapMarkerAlt, FaStar, FaFilter, FaTimes } from 'react-icons/fa';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import FarmerCard from '../components/FarmerCard';
-import { farmers } from '../data/mockData';
+import { farmers as mockFarmers } from '../data/mockData';
+import { API_ENDPOINTS } from '../config/api';
 
 const Farmers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [minRating, setMinRating] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const [farmers, setFarmers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch farmers from API
+  useEffect(() => {
+    fetchFarmers();
+  }, []);
+
+  const fetchFarmers = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      console.log('🔍 Fetching farmers from:', API_ENDPOINTS.MARKETPLACE_FARMERS);
+      const response = await fetch(API_ENDPOINTS.MARKETPLACE_FARMERS);
+      
+      console.log('📡 Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Response error:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('📦 Response data:', data);
+      console.log('👨‍🌾 Farmers count:', data.farmers?.length || 0);
+
+      // Check if we have farmers in the response
+      if (data.farmers && Array.isArray(data.farmers) && data.farmers.length > 0) {
+        console.log('✅ Processing', data.farmers.length, 'farmers');
+        // Transform API farmers to match FarmerCard format
+        const transformedFarmers = data.farmers.map(farmer => {
+          const rating = farmer.rating?.average_rating || 4.5;
+          const reviews = farmer.rating?.total_reviews || 0;
+          
+          return {
+            id: farmer.id,
+            name: farmer.full_name || 'Farmer',
+            farm: farmer.farm_details || 'Farm',
+            location: farmer.location || 'Location not specified',
+            bio: farmer.bio || 'No bio available',
+            rating: rating.toFixed(1),
+            reviews: reviews.toString(),
+            badges: ['Verified'],
+            years: 'Active',
+            products: `${farmer.productCount || 0} products`,
+            image: 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=300&h=350&fit=crop',
+            btnStyle: 'primary'
+          };
+        });
+        setFarmers(transformedFarmers);
+      } else if (data.farmers && Array.isArray(data.farmers) && data.farmers.length === 0) {
+        // No farmers found in database
+        console.log('⚠️ No farmers found in database');
+        console.log('📊 Full response:', JSON.stringify(data, null, 2));
+        setError('No farmers found in database. Check: 1) Backend is running, 2) Farmers have role="farmer" in database, 3) Check backend console for errors. Showing sample farmers.');
+        setFarmers(mockFarmers);
+      } else {
+        console.error('❌ Invalid response format:', data);
+        throw new Error(`Invalid response format. Expected 'farmers' array. Got: ${JSON.stringify(data).substring(0, 200)}`);
+      }
+    } catch (err) {
+      console.error('❌ Error fetching farmers:', err);
+      console.error('❌ Error details:', {
+        message: err.message,
+        name: err.name,
+        stack: err.stack
+      });
+      setError(`Unable to load farmers: ${err.message}. Make sure backend is running on http://localhost:5000. Showing sample farmers.`);
+      // Fallback to mock data
+      setFarmers(mockFarmers);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Extract unique locations
   const locations = [...new Set(farmers.map(f => f.location))];
@@ -172,7 +249,16 @@ const Farmers = () => {
           </motion.div>
 
           {/* Farmers Grid */}
-          {filteredFarmers.length > 0 ? (
+          {loading ? (
+            <div className="text-center py-20">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--primary-500)] mb-4"></div>
+              <p className="text-[var(--text-secondary)]">Loading farmers...</p>
+            </div>
+          ) : error ? (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
+              <p className="text-yellow-700">{error}</p>
+            </div>
+          ) : filteredFarmers.length > 0 ? (
             <motion.div
               layout
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"

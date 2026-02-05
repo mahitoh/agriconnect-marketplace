@@ -9,6 +9,7 @@ const {
   verifyEmail,
   resendVerification
 } = require('../controllers/authController');
+const { promoteToAdmin } = require('../controllers/adminController');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
@@ -85,6 +86,13 @@ router.get('/me', authenticate, getProfile);
  * @access  Private
  */
 router.post('/refresh', authenticate, refreshToken);
+
+/**
+ * @route   POST /api/auth/promote-admin
+ * @desc    Promote a user to admin (TEMPORARY - use with caution)
+ * @access  Public (but requires secret)
+ */
+router.post('/promote-admin', promoteToAdmin);
 
 /**
  * @route   GET /api/auth/confirm

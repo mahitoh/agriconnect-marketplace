@@ -5,6 +5,7 @@ import { GiWheat } from 'react-icons/gi';
 import { FaEnvelope, FaLock, FaArrowRight, FaGoogle, FaFacebook } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import Input from '../components/ui/input';
+import { API_ENDPOINTS } from '../config/api';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -12,27 +13,36 @@ const Login = () => {
     password: ''
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError(''); // Clear error on input change
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
-    // Simulate API call
-    setTimeout(() => {
-      login({
-        name: 'John Doe',
-        email: formData.email,
-        role: 'consumer'
-      });
+    const result = await login(formData);
+
+    if (result.success) {
+      // Navigate based on user role
+      const userRole = result.data.user.role;
+      if (userRole === 'farmer') {
+        navigate('/farmer/dashboard');
+      } else if (userRole === 'admin') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/consumer/dashboard');
+      }
+    } else {
+      setError(result.message);
       setLoading(false);
-      navigate('/consumer/dashboard');
-    }, 1500);
+    }
   };
 
   return (
@@ -91,6 +101,13 @@ const Login = () => {
               </div>
             </div>
 
+            {/* Error Message */}
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -105,6 +122,7 @@ const Login = () => {
               )}
             </button>
           </form>
+
 
           <div className="my-8 flex items-center gap-4">
             <div className="h-px flex-1 bg-[var(--border-color)]" />

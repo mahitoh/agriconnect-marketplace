@@ -133,41 +133,95 @@ const getAllProducts = async (req, res, next) => {
     
     const { category, status, search } = req.query;
 
-    let query = supabase.from('products').select('*');
+    // Build query with join to get farmer information
+    // Using supabaseAdmin to bypass RLS and ensure we get farmer data
+    let query = supabaseAdmin
+      .from('products')
+      .select(`
+        *,
+        profiles!products_farmer_id_fkey (
+          id,
+          full_name,
+          location
+        )
+      `)
+      .eq('status', 'active');
 
     if (category) {
       query = query.eq('category', category);
-    }
-
-    if (status) {
-      query = query.eq('status', status);
     }
 
     if (search) {
       query = query.ilike('name', `%${search}%`);
     }
 
-    const { data: products, error: productsError } = await query
-      .eq('status', 'active')
-      .order('created_at', { ascending: false });
+    query = query.order('created_at', { ascending: false });
+
+    const { data: products, error: productsError } = await query;
 
     if (productsError) {
       console.error('❌ [PRODUCT] Error fetching products:', productsError.message);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to fetch products',
-        error: productsError.message
+      // Try without join if join fails
+      console.log('🔄 Retrying without join...');
+      const { data: productsSimple, error: simpleError } = await supabaseAdmin
+        .from('products')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+      
+      if (simpleError) {
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to fetch products',
+          error: simpleError.message
+        });
+      }
+      
+      // Manually fetch farmer data for each product
+      const productsWithFarmers = await Promise.all(
+        (productsSimple || []).map(async (product) => {
+          const { data: farmer } = await supabaseAdmin
+            .from('profiles')
+            .select('full_name, location')
+            .eq('id', product.farmer_id)
+            .single();
+          
+          return {
+            ...product,
+            profiles: farmer || null
+          };
+        })
+      );
+      
+      console.log('✅ [PRODUCT] Fetched', productsWithFarmers.length, 'products (with manual farmer fetch)');
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Products fetched successfully',
+        data: {
+          products: productsWithFarmers || [],
+          count: productsWithFarmers?.length || 0
+        }
       });
     }
 
     console.log('✅ [PRODUCT] Fetched', products.length, 'products');
+    
+    // Log first product to debug farmer data
+    if (products && products.length > 0) {
+      console.log('🔍 Sample product farmer data:', {
+        productName: products[0].name,
+        farmerId: products[0].farmer_id,
+        profiles: products[0].profiles
+      });
+    }
 
     res.status(200).json({
       success: true,
       message: 'Products fetched successfully',
       data: {
-        products,
-        count: products.length
+        products: products || [],
+        count: products?.length || 0
       }
     });
   } catch (error) {
