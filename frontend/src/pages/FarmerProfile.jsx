@@ -20,10 +20,10 @@ import {
 // Contexts
 import { useCart } from '../context/CartContext';
 import { useFavorites } from '../context/FavoritesContext';
+import { API_ENDPOINTS } from '../config/api';
 
-// Mock data - will be replaced with API calls
+// Mock data - fallback only
 import { 
-  getFarmerById,
   ratingDistribution 
 } from '../data/farmerProfileMock';
 
@@ -34,29 +34,86 @@ const FarmerProfile = () => {
   const [farmer, setFarmer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userReviews, setUserReviews] = useState([]);
+  const [error, setError] = useState(null);
 
   // Use contexts
   const { addToCart } = useCart();
   const { toggleFollowFarmer, isFollowingFarmer } = useFavorites();
 
-  // Fetch farmer data based on ID
+  // Fetch farmer data from API
   useEffect(() => {
-    // Simulate API call - replace with actual API when backend is connected
-    const fetchFarmer = () => {
+    const fetchFarmer = async () => {
       setLoading(true);
-      const farmerData = getFarmerById(parseInt(id));
+      setError(null);
       
-      if (!farmerData) {
-        // Farmer not found, redirect to 404
-        navigate('/404');
-        return;
+      try {
+        console.log('🔍 Fetching farmer profile:', id);
+        const response = await fetch(API_ENDPOINTS.MARKETPLACE_FARMER_PROFILE(id));
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            navigate('/404');
+            return;
+          }
+          throw new Error(`Failed to fetch farmer profile: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('📦 Farmer profile data:', data);
+        
+        // Transform API data to match component structure
+        const transformedFarmer = {
+          id: data.farmer.id,
+          name: data.farmer.full_name || 'Farmer',
+          farmName: data.farmer.farm_details || 'Farm',
+          location: data.farmer.location || 'Location not specified',
+          bio: data.farmer.bio || 'No bio available',
+          verified: data.farmer.approved || false,
+          rating: data.rating?.average_rating?.toFixed(1) || '0.0',
+          totalReviews: data.rating?.total_reviews || 0,
+          totalOrders: 0, // TODO: Get from orders data when available
+          memberSince: new Date(data.farmer.created_at).getFullYear(),
+          coverImage: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1200&h=400&fit=crop',
+          profileImage: 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
+          avatar: 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
+          badges: data.farmer.approved ? ['Verified Farmer'] : ['Pending Approval'],
+          products: (data.products || []).map(product => ({
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            unit: product.unit || 'kg',
+            image: product.image_url || 'https://images.unsplash.com/photo-1546548970-71785318a17b?w=400&h=400&fit=crop',
+            category: product.category || 'Other',
+            inStock: product.quantity > 0,
+            quantity: product.quantity,
+            description: product.description || '',
+            organic: product.organic_certified || false,
+            harvest: product.harvest_date ? new Date(product.harvest_date).toLocaleDateString() : null
+          })),
+          reviews: (data.recentReviews || []).map(review => ({
+            id: review.id,
+            author: review.profiles?.full_name || 'Anonymous',
+            rating: review.rating,
+            comment: review.comment,
+            date: new Date(review.created_at).toLocaleDateString(),
+            productName: review.products?.name || 'Product'
+          })),
+          specialties: ['Organic Farming', 'Sustainable'],
+          certifications: data.farmer.approved ? ['Verified Farmer'] : []
+        };
+        
+        setFarmer(transformedFarmer);
+      } catch (err) {
+        console.error('❌ Error fetching farmer:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
-      
-      setFarmer(farmerData);
-      setLoading(false);
     };
 
-    fetchFarmer();
+    if (id) {
+      fetchFarmer();
+    }
   }, [id, navigate]);
 
   // Handlers
@@ -121,6 +178,30 @@ const FarmerProfile = () => {
           />
           <p style={{ color: '#6b7280' }}>Loading farmer profile...</p>
         </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-secondary)]">
+        <Navbar />
+        <div className="pt-24 pb-20 px-6">
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-8">
+              <h2 className="text-2xl font-bold text-red-800 mb-4">Error Loading Farmer Profile</h2>
+              <p className="text-red-600 mb-6">{error}</p>
+              <button
+                onClick={() => navigate('/farmers')}
+                className="px-6 py-3 bg-[var(--primary-500)] text-white rounded-lg font-medium hover:bg-[var(--primary-600)]"
+              >
+                Back to Farmers
+              </button>
+            </div>
+          </div>
+        </div>
+        <Footer />
       </div>
     );
   }
