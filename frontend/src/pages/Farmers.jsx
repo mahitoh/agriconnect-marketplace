@@ -45,21 +45,31 @@ const Farmers = () => {
         console.log('✅ Processing', data.farmers.length, 'farmers');
         // Transform API farmers to match FarmerCard format
         const transformedFarmers = data.farmers.map(farmer => {
-          const rating = farmer.rating?.average_rating || 4.5;
+          const rating = farmer.rating?.average_rating || 0;
           const reviews = farmer.rating?.total_reviews || 0;
+          
+          // Build badges from certifications
+          const badges = farmer.certifications && farmer.certifications.length > 0 
+            ? farmer.certifications.slice(0, 3) // Take first 3 certifications
+            : (farmer.approved ? ['Verified'] : ['Farmer']);
+          
+          // Format years experience
+          const yearsText = farmer.years_experience 
+            ? `${farmer.years_experience}+ years` 
+            : 'Active';
           
           return {
             id: farmer.id,
             name: farmer.full_name || 'Farmer',
-            farm: farmer.farm_details || 'Farm',
+            farm: farmer.farm_name || farmer.farm_details || 'Farm',
             location: farmer.location || 'Location not specified',
-            bio: farmer.bio || 'No bio available',
+            bio: farmer.bio || 'Dedicated to bringing you the freshest farm products.',
             rating: rating.toFixed(1),
             reviews: reviews.toString(),
-            badges: ['Verified'],
-            years: 'Active',
+            badges: badges,
+            years: yearsText,
             products: `${farmer.productCount || 0} products`,
-            image: 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=300&h=350&fit=crop',
+            image: farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=300&h=350&fit=crop',
             btnStyle: 'primary'
           };
         });
@@ -261,7 +271,7 @@ const Farmers = () => {
           ) : filteredFarmers.length > 0 ? (
             <motion.div
               layout
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
             >
               <AnimatePresence>
                 {filteredFarmers.map((farmer) => (

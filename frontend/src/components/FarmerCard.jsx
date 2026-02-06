@@ -94,16 +94,16 @@ const FarmerCard = ({ farmer }) => {
         </p>
 
         {/* Bio */}
-        <p className="text-sm text-[var(--text-secondary)] mb-4 line-clamp-2 leading-relaxed">
+        <p className="text-sm text-[var(--text-secondary)] mb-4 line-clamp-3 leading-relaxed">
           {farmer.bio}
         </p>
 
         {/* Badges */}
         <div className="flex flex-wrap gap-2 mb-4">
-          {farmer.badges.map((badge) => (
+          {farmer.badges && farmer.badges.slice(0, 4).map((badge) => (
             <span
               key={badge}
-              className="px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-[var(--primary-50)] to-[var(--accent-50)] text-[var(--primary-600)] border border-[var(--primary-200)]"
+              className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-[var(--primary-50)] to-[var(--accent-50)] text-[var(--primary-600)] border border-[var(--primary-200)]"
             >
               {badge}
             </span>

@@ -33,7 +33,6 @@ const FarmerProfile = () => {
   const [activeTab, setActiveTab] = useState('products');
   const [farmer, setFarmer] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [userReviews, setUserReviews] = useState([]);
   const [error, setError] = useState(null);
 
   // Use contexts
@@ -65,7 +64,7 @@ const FarmerProfile = () => {
         const transformedFarmer = {
           id: data.farmer.id,
           name: data.farmer.full_name || 'Farmer',
-          farmName: data.farmer.farm_details || 'Farm',
+          farmName: data.farmer.farm_name || data.farmer.farm_details || 'Farm',
           location: data.farmer.location || 'Location not specified',
           bio: data.farmer.bio || 'No bio available',
           verified: data.farmer.approved || false,
@@ -73,10 +72,14 @@ const FarmerProfile = () => {
           totalReviews: data.rating?.total_reviews || 0,
           totalOrders: 0, // TODO: Get from orders data when available
           memberSince: new Date(data.farmer.created_at).getFullYear(),
-          coverImage: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1200&h=400&fit=crop',
-          profileImage: 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
-          avatar: 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
+          yearsExperience: data.farmer.years_experience || null,
+          coverImage: data.farmer.banner_url || 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1200&h=400&fit=crop',
+          bannerUrl: data.farmer.banner_url,
+          profileImage: data.farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
+          avatarUrl: data.farmer.avatar_url,
+          avatar: data.farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
           badges: data.farmer.approved ? ['Verified Farmer'] : ['Pending Approval'],
+          certifications: data.farmer.certifications || [],
           products: (data.products || []).map(product => ({
             id: product.id,
             name: product.name,
@@ -98,8 +101,8 @@ const FarmerProfile = () => {
             date: new Date(review.created_at).toLocaleDateString(),
             productName: review.products?.name || 'Product'
           })),
-          specialties: ['Organic Farming', 'Sustainable'],
-          certifications: data.farmer.approved ? ['Verified Farmer'] : []
+          specialties: data.farmer.certifications || ['Organic Farming', 'Sustainable'],
+          totalProducts: data.products?.length || 0
         };
         
         setFarmer(transformedFarmer);
@@ -128,24 +131,34 @@ const FarmerProfile = () => {
     alert(`Contact ${farmer?.name} at: contact@${farmer?.farmName?.toLowerCase().replace(/\s/g, '')}.com`);
   };
 
-  // Load user reviews from localStorage
-  useEffect(() => {
-    const savedReviews = localStorage.getItem(`reviews_farmer_${id}`);
-    if (savedReviews) {
+  // Handle review submission - refresh reviews after submission
+  const handleReviewSubmit = async (review) => {
+    console.log('Review submitted:', review);
+    // Refetch farmer data to get updated reviews
+    if (id) {
       try {
-        setUserReviews(JSON.parse(savedReviews));
-      } catch (error) {
-        console.error('Error loading reviews:', error);
+        const response = await fetch(API_ENDPOINTS.MARKETPLACE_FARMER_PROFILE(id));
+        if (response.ok) {
+          const data = await response.json();
+          // Update only the reviews part
+          setFarmer(prev => ({
+            ...prev,
+            reviews: (data.recentReviews || []).map(review => ({
+              id: review.id,
+              author: review.profiles?.full_name || 'Anonymous',
+              rating: review.rating,
+              comment: review.comment,
+              date: new Date(review.created_at).toLocaleDateString(),
+              productName: review.products?.name || 'Product'
+            })),
+            totalReviews: data.rating?.total_reviews || prev.totalReviews,
+            rating: data.rating?.average_rating?.toFixed(1) || prev.rating
+          }));
+        }
+      } catch (err) {
+        console.error('Error refreshing reviews:', err);
       }
     }
-  }, [id]);
-
-  // Handle review submission
-  const handleReviewSubmit = (review) => {
-    const updatedReviews = [review, ...userReviews];
-    setUserReviews(updatedReviews);
-    localStorage.setItem(`reviews_farmer_${id}`, JSON.stringify(updatedReviews));
-    alert('Thank you for your review!');
   };
 
   const handleAddToCart = (product) => {
@@ -213,7 +226,6 @@ const FarmerProfile = () => {
   const products = farmer.products || [];
   const isFollowing = isFollowingFarmer(farmer.id);
   const farmerReviews = farmer.reviews || [];
-  const allReviews = [...userReviews, ...farmerReviews];
 
   return (
     <div 
@@ -310,20 +322,21 @@ const FarmerProfile = () => {
                 <ReviewForm 
                   farmerId={farmer.id}
                   farmerName={farmer.name}
+                  products={products}
                   onSubmit={handleReviewSubmit}
                 />
 
                 {/* Rating Summary */}
                 <RatingSummary 
                   rating={farmer.rating} 
-                  totalReviews={farmer.totalReviews + userReviews.length}
+                  totalReviews={farmer.totalReviews}
                   distribution={ratingDistribution}
                 />
 
                 {/* Reviews List */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {allReviews.length > 0 ? (
-                    allReviews.map(review => (
+                  {farmerReviews.length > 0 ? (
+                    farmerReviews.map(review => (
                       <FarmerReviewCard key={review.id} review={review} />
                     ))
                   ) : (

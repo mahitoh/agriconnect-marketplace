@@ -1,14 +1,34 @@
 import React, { useState } from 'react';
-import { Star, Send, X } from 'lucide-react';
+import { Star, Send, X, Package } from 'lucide-react';
+import { API_ENDPOINTS } from '../../config/api';
+import { useAuth } from '../../context/AuthContext';
 
-const ReviewForm = ({ farmerId, farmerName, onSubmit, onClose }) => {
+const ReviewForm = ({ farmerId, farmerName, products = [], onSubmit, onClose }) => {
+  const [selectedProductId, setSelectedProductId] = useState('');
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const { user } = useAuth();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!user) {
+      alert('Please login to submit a review');
+      return;
+    }
+
+    if (user.role !== 'customer') {
+      alert('Only customers can submit reviews');
+      return;
+    }
+
+    if (!selectedProductId) {
+      alert('Please select a product to review');
+      return;
+    }
     
     if (rating === 0) {
       alert('Please select a rating');
@@ -21,26 +41,48 @@ const ReviewForm = ({ farmerId, farmerName, onSubmit, onClose }) => {
     }
 
     setIsSubmitting(true);
+    setError('');
 
-    // Create review object
-    const review = {
-      id: Date.now(),
-      farmerId,
-      rating,
-      comment: comment.trim(),
-      date: new Date().toISOString(),
-      author: 'You', // In real app, this would come from auth context
-      avatar: null,
-      helpful: 0
-    };
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(API_ENDPOINTS.REVIEWS, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          productId: selectedProductId,
+          farmerId,
+          rating,
+          comment: comment.trim()
+        })
+      });
 
-    // Simulate API delay
-    setTimeout(() => {
-      onSubmit(review);
-      setIsSubmitting(false);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to submit review');
+      }
+
+      // Notify parent component
+      if (onSubmit) {
+        onSubmit(data.data.review);
+      }
+
+      // Reset form
+      setSelectedProductId('');
       setRating(0);
       setComment('');
-    }, 500);
+      alert('Review submitted successfully!');
+    } catch (err) {
+      console.error('Error submitting review:', err);
+      setError(err.message);
+      alert(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -74,6 +116,53 @@ const ReviewForm = ({ farmerId, farmerName, onSubmit, onClose }) => {
       </div>
 
       <form onSubmit={handleSubmit}>
+        {/* Product Selector */}
+        <div style={{ marginBottom: '20px' }}>
+          <label 
+            style={{ 
+              display: 'block', 
+              fontSize: '14px', 
+              fontWeight: '600', 
+              color: '#374151', 
+              marginBottom: '8px' 
+            }}
+          >
+            <Package size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+            Select Product to Review
+          </label>
+          {products.length > 0 ? (
+            <select
+              value={selectedProductId}
+              onChange={(e) => setSelectedProductId(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                border: '2px solid #e5e7eb',
+                borderRadius: '12px',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+                background: 'white',
+                cursor: 'pointer',
+                outline: 'none',
+                transition: 'border-color 0.2s'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#2d5f3f'}
+              onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+            >
+              <option value="">-- Select a product --</option>
+              {products.map(product => (
+                <option key={product.id} value={product.id}>
+                  {product.name} - {product.price} CFA per {product.unit || 'unit'}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p style={{ fontSize: '14px', color: '#6b7280', padding: '12px', background: '#f3f4f6', borderRadius: '8px' }}>
+              No products available to review
+            </p>
+          )}
+        </div>
+
         {/* Star Rating */}
         <div style={{ marginBottom: '20px' }}>
           <label 
@@ -167,11 +256,11 @@ const ReviewForm = ({ farmerId, farmerName, onSubmit, onClose }) => {
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={isSubmitting || rating === 0 || comment.trim().length < 10}
+          disabled={isSubmitting || !selectedProductId || rating === 0 || comment.trim().length < 10}
           style={{
             width: '100%',
             padding: '14px 24px',
-            background: (isSubmitting || rating === 0 || comment.trim().length < 10) 
+            background: (isSubmitting || !selectedProductId || rating === 0 || comment.trim().length < 10) 
               ? '#d1d5db' 
               : 'linear-gradient(135deg, #2d5f3f, #4a7c59)',
             color: 'white',
@@ -179,7 +268,7 @@ const ReviewForm = ({ farmerId, farmerName, onSubmit, onClose }) => {
             borderRadius: '12px',
             fontSize: '16px',
             fontWeight: '700',
-            cursor: (isSubmitting || rating === 0 || comment.trim().length < 10) 
+            cursor: (isSubmitting || !selectedProductId || rating === 0 || comment.trim().length < 10) 
               ? 'not-allowed' 
               : 'pointer',
             display: 'flex',

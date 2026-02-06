@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { API_ENDPOINTS } from '../config/api';
 
 const FavoritesContext = createContext();
 
@@ -14,12 +15,12 @@ export const FavoritesProvider = ({ children }) => {
   const [followedFarmers, setFollowedFarmers] = useState([]);
   const [likedProducts, setLikedProducts] = useState([]);
   const [notification, setNotification] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // Load from localStorage on mount
+  // Load from localStorage on mount (farmers) and API (products)
   useEffect(() => {
+    // Load followed farmers from localStorage (UI-only feature for now)
     const savedFarmers = localStorage.getItem('followedFarmers');
-    const savedProducts = localStorage.getItem('likedProducts');
-    
     if (savedFarmers) {
       try {
         setFollowedFarmers(JSON.parse(savedFarmers));
@@ -28,23 +29,39 @@ export const FavoritesProvider = ({ children }) => {
       }
     }
     
-    if (savedProducts) {
-      try {
-        setLikedProducts(JSON.parse(savedProducts));
-      } catch (error) {
-        console.error('Error loading liked products:', error);
-      }
-    }
+    // Fetch favorited products from API
+    fetchFavorites();
   }, []);
 
-  // Save to localStorage whenever they change
+  // Fetch favorites from API
+  const fetchFavorites = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return; // Not logged in
+
+      const response = await fetch(API_ENDPOINTS.FAVORITES, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data.favorites) {
+          // Extract products from favorites
+          const products = data.data.favorites.map(fav => fav.products).filter(Boolean);
+          setLikedProducts(products);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching favorites:', error);
+    }
+  };
+
+  // Save farmers to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('followedFarmers', JSON.stringify(followedFarmers));
   }, [followedFarmers]);
-
-  useEffect(() => {
-    localStorage.setItem('likedProducts', JSON.stringify(likedProducts));
-  }, [likedProducts]);
 
   // Show notification
   const showNotification = (message, type = 'success') => {
@@ -52,7 +69,7 @@ export const FavoritesProvider = ({ children }) => {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // Follow/Unfollow farmer
+  // Follow/Unfollow farmer (localStorage only for now)
   const toggleFollowFarmer = (farmer) => {
     setFollowedFarmers(prev => {
       const isFollowing = prev.some(f => f.id === farmer.id);
@@ -79,25 +96,60 @@ export const FavoritesProvider = ({ children }) => {
     return followedFarmers.some(f => f.id === farmerId);
   };
 
-  // Like/Unlike product
-  const toggleLikeProduct = (product) => {
-    setLikedProducts(prev => {
-      const isLiked = prev.some(p => p.id === product.id);
-      
+  // Like/Unlike product (with API)
+  const toggleLikeProduct = async (product) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      showNotification('Please login to add favorites', 'error');
+      return;
+    }
+
+    setLoading(true);
+    const isLiked = isProductLiked(product.id);
+
+    try {
       if (isLiked) {
-        showNotification(`Removed ${product.name} from favorites`);
-        return prev.filter(p => p.id !== product.id);
+        // Remove from favorites
+        const response = await fetch(API_ENDPOINTS.FAVORITES_REMOVE(product.id), {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          setLikedProducts(prev => prev.filter(p => p.id !== product.id));
+          showNotification(`Removed ${product.name} from favorites`);
+        } else {
+          const data = await response.json();
+          throw new Error(data.message || 'Failed to remove favorite');
+        }
       } else {
-        showNotification(`Added ${product.name} to favorites!`);
-        return [...prev, {
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          image: product.image,
-          category: product.category
-        }];
+        // Add to favorites
+        const response = await fetch(API_ENDPOINTS.FAVORITES, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ productId: product.id })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setLikedProducts(prev => [...prev, product]);
+          showNotification(`Added ${product.name} to favorites!`);
+        } else {
+          const data = await response.json();
+          throw new Error(data.message || 'Failed to add favorite');
+        }
       }
-    });
+    } catch (error) {
+      console.error('Error toggling product favorite:', error);
+      showNotification(error.message, 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Check if product is liked
@@ -118,7 +170,9 @@ export const FavoritesProvider = ({ children }) => {
     isProductLiked,
     getFollowedCount,
     getLikedCount,
-    notification
+    notification,
+    loading,
+    refreshFavorites: fetchFavorites
   };
 
   return (

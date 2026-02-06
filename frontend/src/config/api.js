@@ -7,6 +7,7 @@ export const API_ENDPOINTS = {
   SIGNUP: `${API_BASE_URL}/api/auth/signup`,
   LOGOUT: `${API_BASE_URL}/api/auth/logout`,
   PROFILE: `${API_BASE_URL}/api/profile`,
+  PROFILE_UPLOAD_IMAGE: `${API_BASE_URL}/api/profile/upload-image`,
   REFRESH_TOKEN: `${API_BASE_URL}/api/auth/refresh`,
   VERIFY_EMAIL: `${API_BASE_URL}/api/auth/verify`,
   RESEND_VERIFICATION: `${API_BASE_URL}/api/auth/resend-verification`,
@@ -32,6 +33,17 @@ export const API_ENDPOINTS = {
   // Marketplace endpoints
   MARKETPLACE_FARMERS: `${API_BASE_URL}/api/marketplace/farmers`,
   MARKETPLACE_FARMER_PROFILE: (id) => `${API_BASE_URL}/api/marketplace/farmers/${id}`,
+
+  // Review endpoints
+  REVIEWS: `${API_BASE_URL}/api/reviews`,
+  REVIEWS_FARMER: (farmerId) => `${API_BASE_URL}/api/reviews/farmer/${farmerId}`,
+  REVIEWS_PRODUCT: (productId) => `${API_BASE_URL}/api/reviews/product/${productId}`,
+  REVIEW_BY_ID: (id) => `${API_BASE_URL}/api/reviews/${id}`,
+
+  // Favorites endpoints
+  FAVORITES: `${API_BASE_URL}/api/favorites`,
+  FAVORITES_CHECK: (productId) => `${API_BASE_URL}/api/favorites/check/${productId}`,
+  FAVORITES_REMOVE: (productId) => `${API_BASE_URL}/api/favorites/${productId}`,
 };
 
 export default API_BASE_URL;

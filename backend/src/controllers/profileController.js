@@ -6,27 +6,98 @@ const { validationResult } = require('express-validator');
  * GET /api/profile
  */
 const getProfile = async (req, res, next) => {
-  try {    const userId = req.user.id;
+  try {
+    const userId = req.user.id;
+    console.log('📡 Fetching profile for user:', userId);
 
-    const { data: profile, error } = await supabase
+    // Use supabaseAdmin to bypass RLS policies
+    const { data: profile, error } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
 
-    if (error || !profile) {
+    if (error && error.code === 'PGRST116') {
+      // No profile found - create one
+      console.log('⚠️ No profile found, creating new profile for user:', userId);
+      
+      // Get user info from auth to populate initial profile
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+      
+      const newProfile = {
+        id: userId,
+        full_name: authUser?.user?.user_metadata?.full_name || '',
+        phone: authUser?.user?.user_metadata?.phone || '',
+        role: authUser?.user?.user_metadata?.role || 'consumer',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: createdProfile, error: createError } = await supabaseAdmin
+        .from('profiles')
+        .insert(newProfile)
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('❌ Error creating profile:', createError);
+        // Return empty profile structure instead of error
+        return res.status(200).json({
+          success: true,
+          message: 'Profile not found, returning defaults',
+          data: { 
+            profile: {
+              id: userId,
+              full_name: authUser?.user?.user_metadata?.full_name || '',
+              phone: '',
+              location: '',
+              bio: '',
+              farm_details: '',
+              farm_name: '',
+              years_experience: '',
+              certifications: [],
+              avatar_url: '',
+              banner_url: ''
+            }
+          }
+        });
+      }
+
+      console.log('✅ Created new profile:', createdProfile);
+      return res.status(200).json({
+        success: true,
+        message: 'Profile created successfully',
+        data: { profile: createdProfile }
+      });
+    }
+
+    if (error) {
+      console.error('❌ Error fetching profile:', error);
+      return res.status(404).json({
+        success: false,
+        message: 'Profile not found',
+        error: error.message
+      });
+    }
+
+    if (!profile) {
+      console.log('⚠️ No profile found for user:', userId);
       return res.status(404).json({
         success: false,
         message: 'Profile not found'
       });
     }
 
+    console.log('✅ Profile found:', JSON.stringify(profile, null, 2));
+
     res.status(200).json({
       success: true,
       message: 'Profile fetched successfully',
       data: { profile }
     });
-  } catch (error) {    next(error);
+  } catch (error) {
+    console.error('❌ Exception in getProfile:', error);
+    next(error);
   }
 };
 
@@ -36,14 +107,43 @@ const getProfile = async (req, res, next) => {
  */
 const updateProfile = async (req, res, next) => {
   try {    const userId = req.user.id;
-    const { fullName, phone, bio, location, farmDetails } = req.body;
+    const { fullName, phone, bio, location, farmDetails, farmName, yearsExperience, certifications, avatarUrl, bannerUrl } = req.body;
+
+    console.log('📝 Updating profile for user:', userId);
+    console.log('📦 Received data:', { fullName, phone, bio, location, farmDetails, farmName, yearsExperience, certifications: certifications?.length, avatarUrl: !!avatarUrl, bannerUrl: !!bannerUrl });
 
     const updates = {};
-    if (fullName) updates.full_name = fullName;
-    if (phone) updates.phone = phone;
-    if (bio !== undefined) updates.bio = bio;
-    if (location !== undefined) updates.location = location;
-    if (farmDetails !== undefined) updates.farm_details = farmDetails;
+    // Only update fields that have actual values (not empty strings)
+    // Note: email is stored in auth.users, not profiles table
+    if (fullName && fullName.trim()) updates.full_name = fullName.trim();
+    if (phone && phone.trim()) updates.phone = phone.trim();
+    // For bio and farmDetails, allow empty strings to clear them, but only if explicitly provided
+    if (bio !== undefined && bio !== null) updates.bio = bio.trim();
+    if (location && location.trim()) updates.location = location.trim();
+    if (farmDetails !== undefined && farmDetails !== null) updates.farm_details = farmDetails.trim();
+    
+    // New fields - only add if the columns exist in the database
+    // These will fail silently if columns don't exist, but won't break the whole update
+    try {
+      if (farmName !== undefined && farmName !== null) updates.farm_name = farmName.trim();
+      if (yearsExperience !== undefined && yearsExperience !== null) updates.years_experience = yearsExperience;
+      if (certifications !== undefined) updates.certifications = certifications;
+      if (avatarUrl !== undefined) updates.avatar_url = avatarUrl;
+      if (bannerUrl !== undefined) updates.banner_url = bannerUrl;
+    } catch (e) {
+      console.log('⚠️ Some new profile fields may not exist in database yet');
+    }
+
+    console.log('🔄 Updates to apply:', updates);
+
+    // Check if there are any updates to make
+    if (Object.keys(updates).length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No changes to update',
+        data: { profile: null }
+      });
+    }
 
     const { data: profile, error } = await supabaseAdmin
       .from('profiles')
@@ -52,17 +152,58 @@ const updateProfile = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) {      return res.status(500).json({
+    if (error) {
+      console.error('❌ Database error updating profile:', error);
+      
+      // If error is about missing columns, try again with basic fields only
+      if (error.message && (error.message.includes('column') || error.message.includes('does not exist'))) {
+        console.log('🔄 Retrying with basic fields only...');
+        const basicUpdates = {};
+        if (fullName && fullName.trim()) basicUpdates.full_name = fullName.trim();
+        if (phone && phone.trim()) basicUpdates.phone = phone.trim();
+        if (bio !== undefined && bio !== null) basicUpdates.bio = bio.trim();
+        if (location && location.trim()) basicUpdates.location = location.trim();
+        if (farmDetails !== undefined && farmDetails !== null) basicUpdates.farm_details = farmDetails.trim();
+
+        const { data: basicProfile, error: basicError } = await supabaseAdmin
+          .from('profiles')
+          .update(basicUpdates)
+          .eq('id', userId)
+          .select()
+          .single();
+
+        if (basicError) {
+          console.error('❌ Basic update also failed:', basicError);
+          return res.status(500).json({
+            success: false,
+            message: 'Failed to update profile. Please run database migration.',
+            error: basicError.message
+          });
+        }
+
+        return res.status(200).json({
+          success: true,
+          message: 'Profile updated (some fields skipped - run database migration for full support)',
+          data: { profile: basicProfile }
+        });
+      }
+
+      return res.status(500).json({
         success: false,
         message: 'Failed to update profile',
         error: error.message
       });
-    }    res.status(200).json({
+    }
+    
+    console.log('✅ Profile updated successfully');
+    res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
       data: { profile }
     });
-  } catch (error) {    next(error);
+  } catch (error) {
+    console.error('❌ Exception in updateProfile:', error);
+    next(error);
   }
 };
 

@@ -53,7 +53,7 @@ const Navbar = () => {
     switch (user.role) {
       case 'farmer':
         return '/farmer/dashboard';
-      case 'consumer':
+      case 'customer':
         return '/consumer/dashboard';
       case 'admin':
         return '/admin/dashboard';
@@ -204,8 +204,14 @@ const Navbar = () => {
                   className="flex items-center gap-2 p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--primary-50)] hover:text-[var(--primary-500)] transition-all"
                   aria-label="Profile Menu"
                 >
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-600)] flex items-center justify-center text-white font-semibold shadow-md">
-                    {user.full_name ? user.full_name.charAt(0).toUpperCase() : <FiUser size={18} />}
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-600)] flex items-center justify-center text-white font-semibold shadow-md overflow-hidden">
+                    {user.avatar_url ? (
+                      <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
+                    ) : user.full_name ? (
+                      user.full_name.charAt(0).toUpperCase()
+                    ) : (
+                      <FiUser size={18} />
+                    )}
                   </div>
                 </button>
 

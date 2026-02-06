@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -20,7 +20,10 @@ import {
   FaPaperPlane,
   FaExclamationTriangle,
   FaImage,
-  FaTimes
+  FaTimes,
+  FaSearchPlus,
+  FaSearchMinus,
+  FaCheck
 } from 'react-icons/fa';
 import Navbar from '../../components/layout/Navbar';
 import Footer from '../../components/layout/Footer';
@@ -53,7 +56,7 @@ const SECTIONS = {
 const FarmerDashboard = () => {
   const [activeSection, setActiveSection] = useState(SECTIONS.DASHBOARD);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const { user, logout } = useAuth();
+  const { user, logout, setUser } = useAuth();
   const navigate = useNavigate();
 
   // Product management state
@@ -84,9 +87,31 @@ const FarmerDashboard = () => {
     phone: '',
     location: '',
     bio: '',
-    farmDetails: ''
+    farmDetails: '',
+    farmName: '',
+    yearsExperience: '',
+    certifications: [],
+    avatarUrl: '',
+    bannerUrl: ''
   });
   const [profileLoading, setProfileLoading] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [bannerFile, setBannerFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [bannerPreview, setBannerPreview] = useState(null);
+
+  // Image cropper modal state
+  const [cropperModal, setCropperModal] = useState({
+    isOpen: false,
+    imageUrl: null,
+    type: null, // 'banner' or 'avatar'
+    originalFile: null
+  });
+  const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
+  const [cropZoom, setCropZoom] = useState(1);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const cropperRef = useRef(null);
 
   // Fetch products on mount and when section changes
   useEffect(() => {
@@ -97,6 +122,25 @@ const FarmerDashboard = () => {
       fetchProfile();
     }
   }, [activeSection]);
+
+  // Also fetch profile on initial mount to have data ready
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user]);
+
+  // Set initial form data from user context as fallback
+  useEffect(() => {
+    if (user && !profileForm.fullName) {
+      console.log('🔄 Setting initial profile form from user context:', user);
+      setProfileForm(prev => ({
+        ...prev,
+        fullName: user.full_name || '',
+        email: user.email || ''
+      }));
+    }
+  }, [user]);
 
   // Fetch products from API
   const fetchProducts = async () => {
@@ -133,6 +177,18 @@ const FarmerDashboard = () => {
     setProfileLoading(true);
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('⚠️ No token found, using user context data');
+        setProfileForm(prev => ({
+          ...prev,
+          fullName: user?.full_name || '',
+          email: user?.email || '',
+          phone: user?.phone || ''
+        }));
+        setProfileLoading(false);
+        return;
+      }
+
       const response = await fetch(API_ENDPOINTS.PROFILE, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -140,25 +196,185 @@ const FarmerDashboard = () => {
         }
       });
 
+      console.log('📡 Profile API response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.data.profile) {
+        console.log('📦 Full API response:', data);
+        
+        if (data.success && data.data && data.data.profile) {
           const profile = data.data.profile;
-          setProfileForm({
+          console.log('👤 Profile object:', profile);
+          console.log('📍 full_name:', profile.full_name);
+          console.log('📍 phone:', profile.phone);
+          console.log('📍 location:', profile.location);
+          console.log('📍 bio:', profile.bio);
+          console.log('📍 farm_details:', profile.farm_details);
+          console.log('📍 farm_name:', profile.farm_name);
+          console.log('📍 years_experience:', profile.years_experience);
+          console.log('📍 certifications:', profile.certifications);
+          console.log('📍 avatar_url:', profile.avatar_url);
+          console.log('📍 banner_url:', profile.banner_url);
+          
+          // Build the profile form with all available data
+          const newProfileForm = {
             fullName: profile.full_name || user?.full_name || '',
-            email: user?.email || '',
-            phone: profile.phone || user?.phone || '',
+            email: user?.email || '', // Email comes from auth, not profiles table
+            phone: profile.phone || '',
             location: profile.location || '',
             bio: profile.bio || '',
-            farmDetails: profile.farm_details || ''
-          });
+            farmDetails: profile.farm_details || '',
+            farmName: profile.farm_name || '',
+            yearsExperience: profile.years_experience || '',
+            certifications: Array.isArray(profile.certifications) ? profile.certifications : [],
+            avatarUrl: profile.avatar_url || '',
+            bannerUrl: profile.banner_url || ''
+          };
+          
+          console.log('📝 Setting profileForm to:', newProfileForm);
+          setProfileForm(newProfileForm);
+          
+          // Set previews from existing URLs - check for valid URL strings
+          const avatarUrl = profile.avatar_url;
+          const bannerUrl = profile.banner_url;
+          
+          if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.startsWith('http')) {
+            console.log('🖼️ Setting avatar preview:', avatarUrl);
+            setAvatarPreview(avatarUrl);
+          }
+          if (bannerUrl && typeof bannerUrl === 'string' && bannerUrl.startsWith('http')) {
+            console.log('🖼️ Setting banner preview:', bannerUrl);
+            setBannerPreview(bannerUrl);
+          }
+        } else {
+          console.log('⚠️ Profile data not in expected format:', data);
+          // Set defaults from user context
+          setProfileForm(prev => ({
+            ...prev,
+            fullName: user?.full_name || '',
+            email: user?.email || '',
+            phone: user?.phone || ''
+          }));
         }
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Profile API error:', response.status, errorData);
+        // If API fails, use user data from auth context
+        setProfileForm(prev => ({
+          ...prev,
+          fullName: user?.full_name || '',
+          email: user?.email || '',
+          phone: user?.phone || ''
+        }));
       }
     } catch (err) {
-      console.error('Error fetching profile:', err);
+      console.error('❌ Error fetching profile:', err);
+      // Fallback to user data from auth context
+      setProfileForm(prev => ({
+        ...prev,
+        fullName: user?.full_name || '',
+        email: user?.email || '',
+        phone: user?.phone || ''
+      }));
     } finally {
       setProfileLoading(false);
     }
+  };
+
+  // Open image cropper modal
+  const openCropper = (file, type) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCropperModal({
+        isOpen: true,
+        imageUrl: reader.result,
+        type: type,
+        originalFile: file
+      });
+      setCropPosition({ x: 0, y: 0 });
+      setCropZoom(1);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle mouse/touch events for dragging
+  const handleCropperMouseDown = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    setDragStart({ x: clientX - cropPosition.x, y: clientY - cropPosition.y });
+  };
+
+  const handleCropperMouseMove = useCallback((e) => {
+    if (!isDragging) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    setCropPosition({
+      x: clientX - dragStart.x,
+      y: clientY - dragStart.y
+    });
+  }, [isDragging, dragStart]);
+
+  const handleCropperMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Apply cropped image
+  const applyCroppedImage = async () => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    img.onload = () => {
+      // Set canvas size based on type - optimized sizes for faster upload
+      if (cropperModal.type === 'banner') {
+        canvas.width = 800;  // Reduced from 1200 for faster upload
+        canvas.height = 267; // Maintain 3:1 aspect ratio
+      } else {
+        canvas.width = 200;  // Reduced from 400 for faster upload
+        canvas.height = 200;
+      }
+      
+      // Calculate the scaled image dimensions
+      const scale = cropZoom;
+      const scaledWidth = img.width * scale;
+      const scaledHeight = img.height * scale;
+      
+      // Calculate position to draw the image (centered + offset)
+      const drawX = (canvas.width - scaledWidth) / 2 + cropPosition.x;
+      const drawY = (canvas.height - scaledHeight) / 2 + cropPosition.y;
+      
+      // Fill background
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw the image
+      ctx.drawImage(img, drawX, drawY, scaledWidth, scaledHeight);
+      
+      // Convert to blob with lower quality for faster upload
+      const quality = cropperModal.type === 'banner' ? 0.7 : 0.8;
+      canvas.toBlob((blob) => {
+        const croppedFile = new File([blob], `${cropperModal.type}-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        const croppedUrl = canvas.toDataURL('image/jpeg', quality);
+        
+        console.log(`📷 ${cropperModal.type} image size: ${(blob.size / 1024).toFixed(1)} KB`);
+        
+        if (cropperModal.type === 'banner') {
+          setBannerFile(croppedFile);
+          setBannerPreview(croppedUrl);
+        } else {
+          setAvatarFile(croppedFile);
+          setAvatarPreview(croppedUrl);
+        }
+        
+        // Close modal
+        setCropperModal({ isOpen: false, imageUrl: null, type: null, originalFile: null });
+        setSuccess(`${cropperModal.type === 'banner' ? 'Banner' : 'Profile photo'} ready. Click "Save Profile" to upload.`);
+      }, 'image/jpeg', quality);
+    };
+    
+    img.src = cropperModal.imageUrl;
   };
 
   // Handle image selection
@@ -309,6 +525,59 @@ const FarmerDashboard = () => {
 
     try {
       const token = localStorage.getItem('token');
+      
+      console.log('🔄 Starting profile save...');
+      console.log('📷 Avatar file:', avatarFile ? 'Yes' : 'No');
+      console.log('🖼️ Banner file:', bannerFile ? 'Yes' : 'No');
+      console.log('📍 Current avatarUrl:', profileForm.avatarUrl);
+      console.log('📍 Current bannerUrl:', profileForm.bannerUrl);
+      
+      // Upload avatar if new file selected
+      let avatarUrl = profileForm.avatarUrl;
+      if (avatarFile) {
+        console.log('📤 Uploading avatar...');
+        const formData = new FormData();
+        formData.append('image', avatarFile);
+        // Use profile upload endpoint with type=avatar
+        const uploadRes = await fetch(`${API_ENDPOINTS.PROFILE_UPLOAD_IMAGE}?type=avatar`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          console.log('✅ Avatar upload response:', uploadData);
+          if (uploadData.success) avatarUrl = uploadData.data.imageUrl;
+        } else {
+          console.error('❌ Avatar upload failed:', uploadRes.status);
+        }
+      }
+
+      // Upload banner if new file selected
+      let bannerUrl = profileForm.bannerUrl;
+      if (bannerFile) {
+        console.log('📤 Uploading banner...');
+        const formData = new FormData();
+        formData.append('image', bannerFile);
+        // Use profile upload endpoint with type=banner
+        const uploadRes = await fetch(`${API_ENDPOINTS.PROFILE_UPLOAD_IMAGE}?type=banner`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          console.log('✅ Banner upload response:', uploadData);
+          if (uploadData.success) bannerUrl = uploadData.data.imageUrl;
+        } else {
+          console.error('❌ Banner upload failed:', uploadRes.status);
+        }
+      }
+
+      console.log('📝 Sending profile update with:');
+      console.log('   avatarUrl:', avatarUrl);
+      console.log('   bannerUrl:', bannerUrl);
+
       const response = await fetch(API_ENDPOINTS.PROFILE, {
         method: 'PUT',
         headers: {
@@ -320,7 +589,12 @@ const FarmerDashboard = () => {
           phone: profileForm.phone,
           location: profileForm.location,
           bio: profileForm.bio,
-          farmDetails: profileForm.farmDetails
+          farmDetails: profileForm.farmDetails,
+          farmName: profileForm.farmName,
+          yearsExperience: profileForm.yearsExperience,
+          certifications: profileForm.certifications,
+          avatarUrl,
+          bannerUrl
         })
       });
 
@@ -332,15 +606,20 @@ const FarmerDashboard = () => {
 
       setSuccess('Profile updated successfully!');
       
-      // Update user in context
+      // Update user in context with avatar
       if (user) {
         const updatedUser = {
           ...user,
           full_name: profileForm.fullName,
-          phone: profileForm.phone
+          phone: profileForm.phone,
+          avatar_url: avatarUrl || profileForm.avatarUrl
         };
         localStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
       }
+
+      // Refresh profile data to ensure form is in sync with database
+      await fetchProfile();
 
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -1013,21 +1292,125 @@ const FarmerDashboard = () => {
     </motion.div>
   );
 
-  const renderProfile = () => (
-    <motion.div {...fadeIn} className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-8">
-      <div className="text-center mb-8">
-        <div className="w-24 h-24 rounded-full bg-[var(--primary-100)] mx-auto mb-4 flex items-center justify-center text-[var(--primary-600)] text-3xl font-bold">
-          {profileForm.fullName?.charAt(0) || user?.full_name?.charAt(0) || 'F'}
-        </div>
-        <h2 className="text-2xl font-bold text-[var(--text-primary)]">{profileForm.fullName || user?.full_name || 'Farmer'}</h2>
-        <p className="text-[var(--text-secondary)]">Farmer Account</p>
-      </div>
+  const renderProfile = () => {
+    // Show loading state while fetching profile
+    if (profileLoading && !profileForm.fullName) {
+      return (
+        <motion.div {...fadeIn} className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-8">
+          <div className="text-center py-12">
+            <div className="w-12 h-12 border-4 border-[var(--primary-200)] border-t-[var(--primary-500)] rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-[var(--text-secondary)]">Loading your profile...</p>
+          </div>
+        </motion.div>
+      );
+    }
 
-      {(error || success) && (
-        <div className={`mb-6 p-4 rounded-xl ${error ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'}`}>
-          {error || success}
+    return (
+      <motion.div {...fadeIn} className="max-w-3xl mx-auto">
+        {/* Twitter/X-style Profile Header */}
+        <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] overflow-hidden mb-6">
+          {/* Banner Image - Entire area clickable like Twitter/X */}
+          <label className="relative h-48 bg-gradient-to-r from-[var(--primary-400)] to-[var(--primary-600)] block cursor-pointer group">
+            {(bannerPreview || profileForm.bannerUrl) ? (
+              <img 
+                src={bannerPreview || profileForm.bannerUrl} 
+                alt="Farm Banner" 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-white/50">
+                <span className="text-lg">🌾 Your Farm Banner</span>
+              </div>
+            )}
+            {/* Hover Overlay - shows on hover like Twitter/X */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-center justify-center">
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center text-white">
+                <FaImage size={32} className="mb-2" />
+                <span className="text-sm font-medium">Click to upload banner</span>
+              </div>
+            </div>
+            {/* Hidden file input */}
+            <input 
+              type="file" 
+              accept="image/*" 
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  if (file.size > 5 * 1024 * 1024) {
+                    setError('Image size must be less than 5MB');
+                    return;
+                  }
+                  openCropper(file, 'banner');
+                }
+                e.target.value = ''; // Reset input
+              }}
+            />
+          </label>
+
+          {/* Profile Photo & Name Section */}
+          <div className="relative px-6 pb-6">
+            {/* Avatar - overlapping banner, clickable like Twitter/X */}
+            <div className="relative -mt-16 mb-4 w-32">
+              <label className="block w-32 h-32 rounded-full border-4 border-white shadow-lg overflow-hidden bg-[var(--primary-100)] cursor-pointer group relative">
+                {(avatarPreview || profileForm.avatarUrl) ? (
+                  <img 
+                    src={avatarPreview || profileForm.avatarUrl} 
+                    alt="Profile" 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[var(--primary-600)] text-4xl font-bold">
+                    {profileForm.fullName?.charAt(0) || user?.full_name?.charAt(0) || 'F'}
+                  </div>
+                )}
+                {/* Hover Overlay for Avatar */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-center justify-center rounded-full">
+                  <FaEdit size={24} className="text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                </div>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      if (file.size > 5 * 1024 * 1024) {
+                        setError('Image size must be less than 5MB');
+                        return;
+                      }
+                      openCropper(file, 'avatar');
+                    }
+                    e.target.value = ''; // Reset input
+                  }}
+                />
+              </label>
+            </div>
+
+            {/* Name & Role */}
+            <div className="mb-2">
+              <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+                {profileForm.fullName || user?.full_name || 'Farmer'}
+              </h2>
+              <p className="text-[var(--text-secondary)]">Farmer Account</p>
+              {profileForm.location && (
+                <p className="text-sm text-[var(--text-tertiary)] flex items-center gap-1 mt-1">
+                  📍 {profileForm.location}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
-      )}
+
+        {/* Profile Form */}
+        <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
+          <h3 className="text-lg font-bold text-[var(--text-primary)] mb-6">Edit Profile Information</h3>
+
+          {(error || success) && (
+            <div className={`mb-6 p-4 rounded-xl ${error ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'}`}>
+              {error || success}
+            </div>
+          )}
 
       <form onSubmit={handleProfileUpdate} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1037,13 +1420,16 @@ const FarmerDashboard = () => {
             onChange={(e) => setProfileForm({ ...profileForm, fullName: e.target.value })}
             required
           />
-          <Input
-            label="Email"
-            type="email"
-            value={profileForm.email}
-            disabled
-            className="bg-gray-50"
-          />
+          <div className="form-group flex flex-col gap-2">
+            <label className="text-sm font-medium text-[var(--text-secondary)]">Email</label>
+            <input
+              type="email"
+              value={profileForm.email}
+              disabled
+              className="px-4 py-3 rounded-xl border-2 border-[var(--border-color)] bg-gray-100 text-[var(--text-tertiary)] cursor-not-allowed"
+            />
+            <span className="text-xs text-[var(--text-tertiary)]">Email cannot be changed</span>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Input
@@ -1054,53 +1440,128 @@ const FarmerDashboard = () => {
           />
           <div className="form-group flex flex-col gap-2">
             <label className="text-sm font-medium text-[var(--text-secondary)]">Location</label>
-            <select
+            <input
+              type="text"
+              list="cities-list"
               className="px-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none bg-white"
               value={profileForm.location}
               onChange={(e) => setProfileForm({ ...profileForm, location: e.target.value })}
-            >
-              <option value="">Select City/Town</option>
+              placeholder="Type or select your city/town"
+            />
+            <datalist id="cities-list">
               {allCities.map(city => (
-                <option key={city} value={city}>{city}</option>
+                <option key={city} value={city} />
               ))}
+            </datalist>
+            <span className="text-xs text-[var(--text-tertiary)]">Type your location or select from suggestions</span>
+          </div>
+        </div>
+
+        {/* Farm Name and Years Experience */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Input
+            label="Farm Name"
+            value={profileForm.farmName}
+            onChange={(e) => setProfileForm({ ...profileForm, farmName: e.target.value })}
+            placeholder="e.g., Les Jardins de Mama Ngo"
+          />
+          <div className="form-group flex flex-col gap-2">
+            <label className="text-sm font-medium text-[var(--text-secondary)]">Years of Experience</label>
+            <select
+              className="px-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none bg-white"
+              value={profileForm.yearsExperience}
+              onChange={(e) => setProfileForm({ ...profileForm, yearsExperience: e.target.value })}
+            >
+              <option value="">Select experience</option>
+              <option value="1">Less than 1 year</option>
+              <option value="2">1-2 years</option>
+              <option value="3">3-5 years</option>
+              <option value="5">5-10 years</option>
+              <option value="10">10-15 years</option>
+              <option value="15">15-20 years</option>
+              <option value="20">20+ years</option>
             </select>
+          </div>
+        </div>
+
+        {/* Certifications / Badges */}
+        <div className="form-group flex flex-col gap-3">
+          <label className="text-sm font-medium text-[var(--text-secondary)]">Certifications & Practices</label>
+          <p className="text-xs text-[var(--text-tertiary)]">Select all that apply to your farming practices</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {['Organic', 'Non-GMO', 'Sustainable', 'Fair Trade', 'Pesticide-Free', 'Local', 'Family Farm', 'Regenerative'].map((cert) => (
+              <label 
+                key={cert}
+                className={`flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                  profileForm.certifications?.includes(cert) 
+                    ? 'border-[var(--primary-500)] bg-[var(--primary-50)] text-[var(--primary-700)]' 
+                    : 'border-[var(--border-color)] hover:border-[var(--primary-300)]'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={profileForm.certifications?.includes(cert) || false}
+                  onChange={(e) => {
+                    const current = profileForm.certifications || [];
+                    if (e.target.checked) {
+                      setProfileForm({ ...profileForm, certifications: [...current, cert] });
+                    } else {
+                      setProfileForm({ ...profileForm, certifications: current.filter(c => c !== cert) });
+                    }
+                  }}
+                  className="w-4 h-4 accent-[var(--primary-500)]"
+                />
+                <span className="text-sm font-medium">{cert}</span>
+              </label>
+            ))}
           </div>
         </div>
 
         <div className="form-group flex flex-col gap-2">
           <label className="text-sm font-medium text-[var(--text-secondary)]">Bio</label>
           <textarea
-            rows="3"
+            rows="4"
             className="px-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none resize-none"
-            placeholder="Tell us about yourself and your farm..."
+            placeholder="Tell customers about yourself... e.g., I am a passionate farmer with 10 years of experience in organic farming..."
             value={profileForm.bio}
             onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+            maxLength={500}
           />
+          <span className="text-xs text-[var(--text-tertiary)]">{profileForm.bio?.length || 0}/500 characters</span>
         </div>
 
         <div className="form-group flex flex-col gap-2">
           <label className="text-sm font-medium text-[var(--text-secondary)]">Farm Details</label>
           <textarea
-            rows="3"
+            rows="4"
             className="px-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none resize-none"
-            placeholder="Describe your farm, practices, certifications, etc..."
+            placeholder="Describe your farm... e.g., Size, types of crops, farming practices, certifications, years of operation..."
             value={profileForm.farmDetails}
             onChange={(e) => setProfileForm({ ...profileForm, farmDetails: e.target.value })}
+            maxLength={1000}
           />
+          <span className="text-xs text-[var(--text-tertiary)]">{profileForm.farmDetails?.length || 0}/1000 characters</span>
         </div>
 
         <div className="pt-4">
           <button
             type="submit"
-            className="w-full py-3 bg-[var(--primary-500)] text-white font-bold rounded-xl hover:bg-[var(--primary-600)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3 bg-[var(--primary-500)] text-white font-bold rounded-xl hover:bg-[var(--primary-600)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             disabled={profileLoading}
           >
-            {profileLoading ? 'Saving...' : 'Save Changes'}
+            {profileLoading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Saving...
+              </>
+            ) : 'Save Changes'}
           </button>
         </div>
       </form>
-    </motion.div>
-  );
+        </div>
+      </motion.div>
+    );
+  };
 
   const renderSupport = () => (
     <motion.div {...fadeIn} className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1177,11 +1638,15 @@ const FarmerDashboard = () => {
           {/* Sidebar */}
           <div className={`flex-shrink-0 w-full md:w-64 bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-4 h-fit sticky top-24 transition-all ${isSidebarOpen ? 'block' : 'hidden md:block'}`}>
             <div className="flex items-center gap-3 px-4 py-4 mb-4 border-b border-[var(--border-light)]">
-              <div className="w-10 h-10 rounded-full bg-[var(--primary-100)] flex items-center justify-center text-[var(--primary-600)] font-bold text-sm">
-                {user?.full_name?.charAt(0) || 'F'}
+              <div className="w-10 h-10 rounded-full bg-[var(--primary-100)] flex items-center justify-center text-[var(--primary-600)] font-bold text-sm overflow-hidden">
+                {(avatarPreview || profileForm.avatarUrl) ? (
+                  <img src={avatarPreview || profileForm.avatarUrl} alt={profileForm.fullName || user?.full_name} className="w-full h-full object-cover" />
+                ) : (
+                  user?.full_name?.charAt(0) || 'F'
+                )}
               </div>
               <div>
-                <h3 className="font-bold text-[var(--text-primary)] text-sm">{user?.full_name || 'Farmer'}</h3>
+                <h3 className="font-bold text-[var(--text-primary)] text-sm">{profileForm.fullName || user?.full_name || 'Farmer'}</h3>
                 <p className="text-xs text-[var(--text-secondary)]">Farmer Account</p>
               </div>
             </div>
@@ -1228,6 +1693,128 @@ const FarmerDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Image Cropper Modal */}
+      <AnimatePresence>
+        {cropperModal.isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+            onClick={() => setCropperModal({ isOpen: false, imageUrl: null, type: null, originalFile: null })}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#1a1a1a] rounded-2xl overflow-hidden max-w-4xl w-full"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+                <button
+                  onClick={() => setCropperModal({ isOpen: false, imageUrl: null, type: null, originalFile: null })}
+                  className="p-2 hover:bg-gray-700 rounded-full transition-colors text-white"
+                >
+                  <FaTimes size={18} />
+                </button>
+                <h3 className="text-white font-semibold">
+                  {cropperModal.type === 'banner' ? 'Edit Banner' : 'Edit Profile Photo'}
+                </h3>
+                <button
+                  onClick={applyCroppedImage}
+                  className="bg-white text-black font-semibold px-4 py-1.5 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  Apply
+                </button>
+              </div>
+
+              {/* Cropper Area */}
+              <div 
+                ref={cropperRef}
+                className="relative overflow-hidden cursor-move"
+                style={{ 
+                  height: cropperModal.type === 'banner' ? '300px' : '400px',
+                  touchAction: 'none'
+                }}
+                onMouseDown={handleCropperMouseDown}
+                onMouseMove={handleCropperMouseMove}
+                onMouseUp={handleCropperMouseUp}
+                onMouseLeave={handleCropperMouseUp}
+                onTouchStart={handleCropperMouseDown}
+                onTouchMove={handleCropperMouseMove}
+                onTouchEnd={handleCropperMouseUp}
+              >
+                {/* Grid Overlay */}
+                <div className="absolute inset-0 pointer-events-none z-10">
+                  <div className="w-full h-full border-2 border-white/30" style={{
+                    backgroundImage: cropperModal.type === 'avatar' 
+                      ? 'none'
+                      : 'linear-gradient(to right, rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.1) 1px, transparent 1px)',
+                    backgroundSize: '33.33% 33.33%'
+                  }}>
+                    {cropperModal.type === 'avatar' && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-64 h-64 border-2 border-white/50 rounded-full" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Image */}
+                <img
+                  src={cropperModal.imageUrl}
+                  alt="Crop preview"
+                  className="absolute select-none"
+                  style={{
+                    left: '50%',
+                    top: '50%',
+                    transform: `translate(calc(-50% + ${cropPosition.x}px), calc(-50% + ${cropPosition.y}px)) scale(${cropZoom})`,
+                    maxWidth: 'none',
+                    maxHeight: 'none',
+                    width: 'auto',
+                    height: cropperModal.type === 'banner' ? '100%' : 'auto',
+                    minWidth: cropperModal.type === 'banner' ? '100%' : 'auto',
+                    minHeight: cropperModal.type === 'avatar' ? '100%' : 'auto'
+                  }}
+                  draggable={false}
+                />
+              </div>
+
+              {/* Zoom Controls */}
+              <div className="flex items-center justify-center gap-4 py-4 bg-[#1a1a1a]">
+                <button
+                  onClick={() => setCropZoom(Math.max(0.5, cropZoom - 0.1))}
+                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full text-white transition-colors"
+                >
+                  <FaSearchMinus size={16} />
+                </button>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="3"
+                  step="0.1"
+                  value={cropZoom}
+                  onChange={(e) => setCropZoom(parseFloat(e.target.value))}
+                  className="w-48 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-white"
+                />
+                <button
+                  onClick={() => setCropZoom(Math.min(3, cropZoom + 0.1))}
+                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full text-white transition-colors"
+                >
+                  <FaSearchPlus size={16} />
+                </button>
+              </div>
+
+              {/* Instructions */}
+              <div className="text-center pb-4 text-gray-400 text-sm">
+                Drag to reposition • Use slider to zoom
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Footer />
     </div>

@@ -119,6 +119,7 @@ export const AuthProvider = ({ children }) => {
           role: data.data.user.role,
           phone: data.data.user.phone,
           approved: data.data.user.approved,
+          avatar_url: data.data.user.avatarUrl || null,
         };
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);

@@ -18,12 +18,14 @@ import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import ProductCard from '../components/ProductCard';
 import FarmerCard from '../components/FarmerCard';
-import { stats, features, products, steps, farmers } from '../data/mockData';
+import { stats, features, products, steps, farmers as mockFarmers } from '../data/mockData';
 import { useCart } from '../context/CartContext';
+import { API_ENDPOINTS } from '../config/api';
 
 const Home = () => {
   const { addToCart } = useCart();
   const [counters, setCounters] = useState(stats.map(() => 0));
+  const [farmers, setFarmers] = useState(mockFarmers);
 
   const handleAddToCart = (product) => {
     const cartProduct = {
@@ -37,6 +39,49 @@ const Home = () => {
     };
     addToCart(cartProduct);
   };
+
+  // Fetch featured farmers from API
+  useEffect(() => {
+    const fetchFarmers = async () => {
+      try {
+        const response = await fetch(`${API_ENDPOINTS.MARKETPLACE_FARMERS}?limit=2`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.farmers && data.farmers.length > 0) {
+            const transformedFarmers = data.farmers.map(farmer => {
+              const rating = farmer.rating?.average_rating || 0;
+              const reviews = farmer.rating?.total_reviews || 0;
+              const badges = farmer.certifications && farmer.certifications.length > 0 
+                ? farmer.certifications.slice(0, 2) 
+                : (farmer.approved ? ['Verified'] : ['Farmer']);
+              const yearsText = farmer.years_experience 
+                ? `${farmer.years_experience}+ years` 
+                : 'Active';
+              
+              return {
+                id: farmer.id,
+                name: farmer.full_name || 'Farmer',
+                farm: farmer.farm_name || farmer.farm_details || 'Farm',
+                location: farmer.location || 'Cameroon',
+                bio: farmer.bio || 'Dedicated to bringing you the freshest farm products.',
+                rating: rating.toFixed(1),
+                reviews: reviews.toString(),
+                badges: badges,
+                years: yearsText,
+                products: `${farmer.productCount || 0} products`,
+                image: farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=300&h=350&fit=crop',
+                btnStyle: 'primary'
+              };
+            });
+            setFarmers(transformedFarmers);
+          }
+        }
+      } catch (err) {
+        console.log('Using mock farmers data');
+      }
+    };
+    fetchFarmers();
+  }, []);
 
   // Animate counters on mount
   useEffect(() => {

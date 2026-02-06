@@ -2,12 +2,17 @@ import React from 'react';
 import { MapPin, Star, Package, Heart, MessageCircle, CheckCircle } from 'lucide-react';
 
 const FarmerProfileHero = ({ farmer, onFollow, onContact, isFollowing = false }) => {
+  // Use banner_url if available, fallback to coverImage
+  const bannerImage = farmer.bannerUrl || farmer.banner_url || farmer.coverImage || 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1200&h=400&fit=crop';
+  // Use avatar_url if available, fallback to profileImage
+  const profileImage = farmer.avatarUrl || farmer.avatar_url || farmer.profileImage || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop';
+
   return (
     <div 
       style={{ 
         position: 'relative', 
         height: '400px', 
-        background: `url(${farmer.coverImage})`, 
+        background: `url(${bannerImage})`, 
         backgroundSize: 'cover', 
         backgroundPosition: 'center' 
       }}
@@ -34,14 +39,15 @@ const FarmerProfileHero = ({ farmer, onFollow, onContact, isFollowing = false })
         >
           {/* Profile Image */}
           <img 
-            src={farmer.profileImage} 
+            src={profileImage} 
             alt={farmer.name} 
             style={{ 
               width: '160px', 
               height: '160px', 
-              borderRadius: '20px', 
+              borderRadius: '50%', 
               border: '4px solid white', 
-              boxShadow: '0 8px 24px rgba(0,0,0,0.2)' 
+              boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+              objectFit: 'cover'
             }} 
           />
           
@@ -102,7 +108,8 @@ const FarmerProfileHero = ({ farmer, onFollow, onContact, isFollowing = false })
                 alignItems: 'center', 
                 gap: '1.5rem', 
                 fontSize: '15px', 
-                color: 'rgba(255,255,255,0.9)' 
+                color: 'rgba(255,255,255,0.9)',
+                flexWrap: 'wrap'
               }}
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -111,10 +118,46 @@ const FarmerProfileHero = ({ farmer, onFollow, onContact, isFollowing = false })
               <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Star size={16} fill="white" /> {farmer.rating} ({farmer.totalReviews} reviews)
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Package size={16} /> {farmer.totalOrders} orders
-              </span>
+              {farmer.yearsExperience && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🌱 {farmer.yearsExperience}+ years
+                </span>
+              )}
+              {farmer.totalProducts > 0 && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Package size={16} /> {farmer.totalProducts} products
+                </span>
+              )}
             </div>
+
+            {/* Certifications */}
+            {farmer.certifications && farmer.certifications.length > 0 && (
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  gap: '8px', 
+                  marginTop: '12px',
+                  flexWrap: 'wrap'
+                }}
+              >
+                {farmer.certifications.map((cert, i) => (
+                  <span 
+                    key={i}
+                    style={{
+                      padding: '4px 10px',
+                      background: 'rgba(34, 197, 94, 0.3)',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: '#bbf7d0',
+                      border: '1px solid rgba(34, 197, 94, 0.4)'
+                    }}
+                  >
+                    ✓ {cert}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           
           {/* Action Buttons */}

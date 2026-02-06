@@ -18,10 +18,11 @@ const createReview = async (req, res, next) => {
     const customerId = req.user.id;
     const { productId, farmerId, orderItemId, rating, comment } = req.body;
 
-    if (!productId || !farmerId || !rating) {
+    // Farmer ID and rating are required, product ID is optional (for general farmer reviews)
+    if (!farmerId || !rating) {
       return res.status(400).json({
         success: false,
-        message: 'Product ID, farmer ID, and rating are required'
+        message: 'Farmer ID and rating are required'
       });
     }
 
@@ -32,25 +33,27 @@ const createReview = async (req, res, next) => {
       });
     }
 
-    // Check if customer already reviewed this product
-    const { data: existingReview } = await supabase
-      .from('reviews')
-      .select('id')
-      .eq('product_id', productId)
-      .eq('customer_id', customerId)
-      .single();
+    // Check if customer already reviewed this product (if productId provided)
+    if (productId) {
+      const { data: existingReview } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('product_id', productId)
+        .eq('customer_id', customerId)
+        .single();
 
-    if (existingReview) {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already reviewed this product'
-      });
+      if (existingReview) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have already reviewed this product'
+        });
+      }
     }
 
     const { data: review, error } = await supabaseAdmin
       .from('reviews')
       .insert({
-        product_id: productId,
+        product_id: productId || null,
         farmer_id: farmerId,
         customer_id: customerId,
         order_item_id: orderItemId,

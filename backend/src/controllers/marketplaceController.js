@@ -256,7 +256,7 @@ exports.searchFarmers = async (req, res) => {
     // Note: Temporarily showing all farmers regardless of approval status for debugging
     let query = supabaseAdmin
       .from('profiles')
-      .select('id, full_name, bio, location, farm_details, created_at, approved, role', { count: 'exact' })
+      .select('id, full_name, bio, location, farm_details, farm_name, years_experience, certifications, avatar_url, banner_url, created_at, approved, role', { count: 'exact' })
       .ilike('role', 'farmer'); // Case-insensitive match
     // Uncomment below to show only approved farmers
     // .eq('approved', true);
@@ -389,7 +389,7 @@ exports.getFarmerProfile = async (req, res) => {
     // Note: Temporarily removed approved filter for debugging
     const { data: farmer, error: farmerError } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, bio, location, farm_details, created_at, approved, role')
+      .select('id, full_name, bio, location, farm_details, farm_name, years_experience, certifications, avatar_url, banner_url, created_at, approved, role')
       .eq('id', farmerId)
       .ilike('role', 'farmer') // Case-insensitive match
       // .eq('approved', true) // Uncomment to show only approved farmers

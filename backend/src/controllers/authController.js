@@ -189,6 +189,7 @@ const login = async (req, res) => {
     const isApproved = profileData?.approved !== undefined ? profileData.approved : data.user.user_metadata?.approved;
     const fullName = profileData?.full_name || data.user.user_metadata?.full_name;
     const phone = profileData?.phone || data.user.user_metadata?.phone;
+    const avatarUrl = profileData?.avatar_url || null;
 
     if (userRole === 'farmer' && !isApproved) {
       return res.status(403).json({
@@ -210,7 +211,8 @@ const login = async (req, res) => {
           fullName: fullName,
           role: userRole,
           phone: phone,
-          approved: isApproved
+          approved: isApproved,
+          avatarUrl: avatarUrl
         },
         token
       }
