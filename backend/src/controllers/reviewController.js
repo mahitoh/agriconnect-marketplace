@@ -2,11 +2,39 @@ const { supabase, supabaseAdmin } = require('../config/supabase');
 const { validationResult } = require('express-validator');
 
 /**
+ * Check if user has purchased a product
+ */
+const checkVerifiedPurchase = async (customerId, productId) => {
+  // Check if user has a completed order containing this product
+  const { data: orderItems, error } = await supabaseAdmin
+    .from('order_items')
+    .select(`
+      id,
+      orders!inner (
+        id,
+        customer_id,
+        status
+      )
+    `)
+    .eq('product_id', productId)
+    .eq('orders.customer_id', customerId)
+    .in('orders.status', ['completed', 'delivered']);
+
+  if (error) {
+    console.error('Error checking purchase:', error);
+    return false;
+  }
+
+  return orderItems && orderItems.length > 0;
+};
+
+/**
  * Create a review
  * POST /api/reviews
  */
 const createReview = async (req, res, next) => {
-  try {    const errors = validationResult(req);
+  try {
+    const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
@@ -16,6 +44,7 @@ const createReview = async (req, res, next) => {
     }
 
     const customerId = req.user.id;
+    const userRole = req.user.role;
     const { productId, farmerId, orderItemId, rating, comment } = req.body;
 
     // Farmer ID and rating are required, product ID is optional (for general farmer reviews)
@@ -33,8 +62,21 @@ const createReview = async (req, res, next) => {
       });
     }
 
-    // Check if customer already reviewed this product (if productId provided)
+    // Check verified purchase if productId is provided
+    let verifiedPurchase = false;
     if (productId) {
+      verifiedPurchase = await checkVerifiedPurchase(customerId, productId);
+      
+      // TODO: Re-enable this check after implementing payment/delivery
+      // For testing purposes, allow reviews without verified purchase
+      // if (!verifiedPurchase) {
+      //   return res.status(403).json({
+      //     success: false,
+      //     message: 'You can only review products you have purchased'
+      //   });
+      // }
+
+      // Check if customer already reviewed this product
       const { data: existingReview } = await supabase
         .from('reviews')
         .select('id')
@@ -50,32 +92,63 @@ const createReview = async (req, res, next) => {
       }
     }
 
+    // Prevent farmers from reviewing their own products
+    if (productId) {
+      const { data: product } = await supabase
+        .from('products')
+        .select('farmer_id')
+        .eq('id', productId)
+        .single();
+
+      if (product && product.farmer_id === customerId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You cannot review your own product'
+        });
+      }
+    }
+
+    console.log('Creating review with data:', {
+      product_id: productId,
+      farmer_id: farmerId,
+      customer_id: customerId,
+      rating: Number(rating),
+      comment: comment
+    });
+
     const { data: review, error } = await supabaseAdmin
       .from('reviews')
       .insert({
         product_id: productId || null,
         farmer_id: farmerId,
         customer_id: customerId,
-        order_item_id: orderItemId,
         rating: Number(rating),
         comment: comment || null
       })
       .select()
       .single();
 
-    if (error) {      return res.status(500).json({
+    if (error) {
+      console.error('Review creation error:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      return res.status(500).json({
         success: false,
-        message: 'Failed to create review',
-        error: error.message
+        message: 'Failed to create review: ' + error.message,
+        error: error.message,
+        details: error.details || error.hint
       });
-    }    res.status(201).json({
+    }
+
+    res.status(201).json({
       success: true,
       message: 'Review created successfully',
       data: {
         review
       }
     });
-  } catch (error) {    next(error);
+  } catch (error) {
+    console.error('Review error:', error);
+    next(error);
   }
 };
 
@@ -348,6 +421,156 @@ const deleteReview = async (req, res, next) => {
   }
 };
 
+/**
+ * Check if user can review a product
+ * GET /api/reviews/can-review/:productId
+ */
+const canReviewProduct = async (req, res, next) => {
+  try {
+    const customerId = req.user.id;
+    const { productId } = req.params;
+
+    // Check if user has purchased this product
+    const verifiedPurchase = await checkVerifiedPurchase(customerId, productId);
+
+    if (!verifiedPurchase) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          canReview: false,
+          reason: 'You must purchase this product before you can review it'
+        }
+      });
+    }
+
+    // Check if user already reviewed this product
+    const { data: existingReview } = await supabase
+      .from('reviews')
+      .select('id, rating, comment, created_at')
+      .eq('product_id', productId)
+      .eq('customer_id', customerId)
+      .single();
+
+    if (existingReview) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          canReview: false,
+          reason: 'You have already reviewed this product',
+          existingReview
+        }
+      });
+    }
+
+    // Check if user is the product owner
+    const { data: product } = await supabase
+      .from('products')
+      .select('farmer_id')
+      .eq('id', productId)
+      .single();
+
+    if (product && product.farmer_id === customerId) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          canReview: false,
+          reason: 'You cannot review your own product'
+        }
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        canReview: true,
+        verifiedPurchase: true
+      }
+    });
+  } catch (error) {
+    console.error('Can review check error:', error);
+    next(error);
+  }
+};
+
+/**
+ * Get user's purchased products that can be reviewed
+ * GET /api/reviews/my-reviewable-products
+ */
+const getReviewableProducts = async (req, res, next) => {
+  try {
+    const customerId = req.user.id;
+
+    // Get all completed order items for this customer
+    const { data: orderItems, error } = await supabaseAdmin
+      .from('order_items')
+      .select(`
+        id,
+        product_id,
+        products (
+          id,
+          name,
+          image_url,
+          farmer_id,
+          profiles!products_farmer_id_fkey (
+            full_name
+          )
+        ),
+        orders!inner (
+          id,
+          status,
+          created_at
+        )
+      `)
+      .eq('orders.customer_id', customerId)
+      .in('orders.status', ['completed', 'delivered']);
+
+    if (error) {
+      console.error('Error fetching reviewable products:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch reviewable products'
+      });
+    }
+
+    // Get existing reviews by this customer
+    const { data: existingReviews } = await supabase
+      .from('reviews')
+      .select('product_id')
+      .eq('customer_id', customerId);
+
+    const reviewedProductIds = new Set((existingReviews || []).map(r => r.product_id));
+
+    // Filter and format products
+    const reviewableProducts = (orderItems || [])
+      .filter(item => item.products && !reviewedProductIds.has(item.product_id))
+      .map(item => ({
+        orderItemId: item.id,
+        productId: item.product_id,
+        productName: item.products.name,
+        productImage: item.products.image_url,
+        farmerId: item.products.farmer_id,
+        farmerName: item.products.profiles?.full_name || 'Farmer',
+        orderDate: item.orders.created_at
+      }));
+
+    // Remove duplicates (same product from multiple orders)
+    const uniqueProducts = Array.from(
+      new Map(reviewableProducts.map(p => [p.productId, p])).values()
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        products: uniqueProducts,
+        count: uniqueProducts.length
+      }
+    });
+  } catch (error) {
+    console.error('Reviewable products error:', error);
+    next(error);
+  }
+};
+
 module.exports = {
   createReview,
   getProductReviews,
@@ -355,6 +578,8 @@ module.exports = {
   getProductRatingSummary,
   getFarmerRatingSummary,
   updateReview,
-  deleteReview
+  deleteReview,
+  canReviewProduct,
+  getReviewableProducts
 };
 

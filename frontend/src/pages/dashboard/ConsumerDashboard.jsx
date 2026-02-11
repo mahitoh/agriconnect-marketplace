@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -22,6 +22,8 @@ import Navbar from '../../components/layout/Navbar';
 import Footer from '../../components/layout/Footer';
 import Input from '../../components/ui/input';
 import { useAuth } from '../../context/AuthContext';
+import { useFavorites } from '../../context/FavoritesContext';
+import { API_ENDPOINTS } from '../../config/api';
 import { consumerSummary, consumerRecentOrders, consumerSuggestions } from '../../data/dashboardMock';
 
 const SECTIONS = {
@@ -36,14 +38,121 @@ const ConsumerDashboard = () => {
   const [activeSection, setActiveSection] = useState(SECTIONS.DASHBOARD);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { user, logout } = useAuth();
+  const { likedProducts, toggleLikeProduct, refreshFavorites } = useFavorites();
   const navigate = useNavigate();
 
-  // Local Wishlist Data
-  const wishlistItems = [
-    { id: 1, name: 'Organic Tomatoes', farmer: 'Ferme Mballa', price: '2,500 FCFA', image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200&h=200&fit=crop', inStock: true },
-    { id: 2, name: 'Fresh Honey', farmer: 'Beekeeping Co.', price: '5,000 FCFA', image: 'https://images.unsplash.com/photo-1587049352846-4a222e784502?w=200&h=200&fit=crop', inStock: true },
-    { id: 3, name: 'Sweet Potatoes', farmer: 'Root Farms', price: '3,000 FCFA', image: 'https://images.unsplash.com/photo-1596097635121-14b63b7a7843?w=200&h=200&fit=crop', inStock: false }
-  ];
+  // Orders state
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  
+  // Reviewable products state
+  const [reviewableProducts, setReviewableProducts] = useState([]);
+  const [reviewModal, setReviewModal] = useState({ isOpen: false, product: null });
+  const [reviewForm, setReviewForm] = useState({ rating: 0, comment: '' });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  // Fetch orders from API
+  useEffect(() => {
+    if (activeSection === SECTIONS.ORDERS || activeSection === SECTIONS.DASHBOARD) {
+      fetchOrders();
+    }
+  }, [activeSection]);
+
+  // Fetch reviewable products
+  useEffect(() => {
+    fetchReviewableProducts();
+  }, []);
+
+  const fetchOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(API_ENDPOINTS.MY_ORDERS, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setOrders(data.data?.orders || []);
+      }
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const fetchReviewableProducts = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      
+      // For testing: Fetch all products since payment isn't implemented yet
+      // TODO: Switch back to REVIEW_MY_REVIEWABLE after payment is implemented
+      const response = await fetch(API_ENDPOINTS.PRODUCTS);
+      if (response.ok) {
+        const data = await response.json();
+        const products = data.data?.products || data.products || [];
+        // Transform to match expected format
+        const formattedProducts = products.slice(0, 6).map(p => ({
+          productId: p.id,
+          productName: p.name,
+          productImage: p.image_url,
+          farmerId: p.farmer_id,
+          farmerName: p.profiles?.full_name || p.farmer_name || 'Farmer'
+        }));
+        setReviewableProducts(formattedProducts);
+      }
+    } catch (error) {
+      console.error('Error fetching reviewable products:', error);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewModal.product || reviewForm.rating === 0) return;
+    
+    setReviewSubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(API_ENDPOINTS.REVIEWS, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          productId: reviewModal.product.productId,
+          farmerId: reviewModal.product.farmerId,
+          rating: reviewForm.rating,
+          comment: reviewForm.comment
+        })
+      });
+      
+      const data = await response.json();
+      if (response.ok) {
+        alert('Review submitted successfully!');
+        setReviewModal({ isOpen: false, product: null });
+        setReviewForm({ rating: 0, comment: '' });
+        fetchReviewableProducts(); // Refresh the list
+      } else {
+        alert(data.message || 'Failed to submit review');
+      }
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      alert('Failed to submit review');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  // Local Wishlist Data - now using context
+  const wishlistItems = likedProducts.map(p => ({
+    id: p.id,
+    name: p.name,
+    farmer: p.farmer || 'Farmer',
+    price: typeof p.price === 'number' ? `${p.price.toLocaleString()} FCFA` : p.price,
+    image: p.image || p.image_url || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200&h=200&fit=crop',
+    inStock: true
+  }));
 
   // Dummy Addresses
   const addresses = [
@@ -171,27 +280,187 @@ const ConsumerDashboard = () => {
   );
 
   const renderOrders = () => (
-    <motion.div {...fadeIn} className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
-      <h3 className="text-lg font-bold text-[var(--text-primary)] mb-6">Order History</h3>
-      <div className="space-y-4">
-        {/* Extended list simulation using existing data */}
-        {[...consumerRecentOrders, ...consumerRecentOrders].map((order, index) => (
-          <div key={`${order.id}-${index}`} className="flex flex-col md:flex-row items-center gap-4 p-4 rounded-xl border border-[var(--border-light)] hover:bg-[var(--bg-secondary)] transition-all">
-            <div className="flex-1">
-              <div className="flex justify-between mb-2">
-                <span className="font-bold text-[var(--text-primary)]">Order #{order.id}</span>
-                <span className="font-bold text-[var(--primary-600)]">{order.total}</span>
-              </div>
-              <p className="text-sm text-[var(--text-secondary)] mb-1">Purchased from: <span className="font-medium">{order.farmer}</span></p>
-              <p className="text-xs text-[var(--text-tertiary)]">{order.date}</p>
+    <motion.div {...fadeIn} className="space-y-6">
+      {/* Reviewable Products Section - TEST MODE */}
+      {reviewableProducts.length > 0 && (
+        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-2xl shadow-sm border border-yellow-200 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-yellow-400 flex items-center justify-center">
+              <FaStar className="text-white" />
             </div>
-            <div className="flex gap-2">
-              <button className="px-4 py-2 border border-[var(--border-color)] rounded-lg text-sm font-medium hover:bg-gray-50">View Invoice</button>
-              <button className="px-4 py-2 bg-[var(--primary-500)] text-white rounded-lg text-sm font-medium hover:bg-[var(--primary-600)]">Reorder</button>
+            <div>
+              <h3 className="text-lg font-bold text-[var(--text-primary)]">Review Products (Test Mode)</h3>
+              <p className="text-sm text-[var(--text-secondary)]">Test mode: You can review any product without purchase verification</p>
             </div>
           </div>
-        ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {reviewableProducts.slice(0, 6).map((product) => (
+              <div key={product.productId} className="bg-white rounded-xl p-4 flex items-center gap-3 border border-yellow-100">
+                <img 
+                  src={product.productImage || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=100&h=100&fit=crop'} 
+                  alt={product.productName}
+                  className="w-14 h-14 rounded-lg object-cover"
+                />
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-sm text-[var(--text-primary)] truncate">{product.productName}</h4>
+                  <p className="text-xs text-[var(--text-secondary)]">From {product.farmerName}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setReviewModal({ isOpen: true, product });
+                    setReviewForm({ rating: 0, comment: '' });
+                  }}
+                  className="px-3 py-1.5 bg-yellow-400 text-white text-xs font-bold rounded-lg hover:bg-yellow-500 transition-colors flex items-center gap-1"
+                >
+                  <FaStar size={10} /> Review
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Orders List */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
+        <h3 className="text-lg font-bold text-[var(--text-primary)] mb-6">Order History</h3>
+        
+        {ordersLoading ? (
+          <div className="text-center py-8">
+            <div className="w-8 h-8 border-4 border-[var(--primary-200)] border-t-[var(--primary-500)] rounded-full animate-spin mx-auto"></div>
+            <p className="text-[var(--text-secondary)] mt-2">Loading orders...</p>
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="text-center py-12">
+            <FaShoppingBag size={48} className="text-[var(--text-tertiary)] mx-auto mb-4" />
+            <p className="text-[var(--text-secondary)]">No orders yet</p>
+            <button 
+              onClick={() => navigate('/marketplace')}
+              className="mt-4 px-6 py-2 bg-[var(--primary-500)] text-white rounded-lg font-medium hover:bg-[var(--primary-600)]"
+            >
+              Start Shopping
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {orders.map((order) => (
+              <div key={order.id} className="p-4 rounded-xl border border-[var(--border-light)] hover:bg-[var(--bg-secondary)] transition-all">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-3">
+                  <div>
+                    <span className="font-bold text-[var(--text-primary)]">Order #{order.id.slice(0, 8)}</span>
+                    <span className={`ml-3 px-3 py-1 rounded-full text-xs font-bold ${
+                      order.status === 'completed' || order.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                      order.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                      order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
+                    </span>
+                  </div>
+                  <span className="font-bold text-[var(--primary-600)]">{order.total_amount?.toLocaleString()} FCFA</span>
+                </div>
+                
+                {/* Order Items */}
+                {order.order_items && order.order_items.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {order.order_items.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-3 text-sm">
+                        {item.products?.image_url && (
+                          <img src={item.products.image_url} alt={item.products?.name} className="w-10 h-10 rounded-lg object-cover" />
+                        )}
+                        <span className="text-[var(--text-secondary)]">
+                          {item.products?.name || 'Product'} × {item.quantity}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-[var(--text-tertiary)]">
+                    {new Date(order.created_at).toLocaleDateString('en-US', { 
+                      year: 'numeric', month: 'short', day: 'numeric' 
+                    })}
+                  </p>
+                  <div className="flex gap-2">
+                    <button className="px-3 py-1.5 border border-[var(--border-color)] rounded-lg text-xs font-medium hover:bg-gray-50">
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Review Modal */}
+      {reviewModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl p-6 max-w-md w-full"
+          >
+            <h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">
+              Review {reviewModal.product?.productName}
+            </h3>
+            
+            {/* Star Rating */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Your Rating</label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewForm(prev => ({ ...prev, rating: star }))}
+                    className="text-3xl transition-transform hover:scale-110"
+                  >
+                    <FaStar 
+                      className={reviewForm.rating >= star ? 'text-yellow-400' : 'text-gray-300'}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Comment */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Your Review</label>
+              <textarea
+                value={reviewForm.comment}
+                onChange={(e) => setReviewForm(prev => ({ ...prev, comment: e.target.value }))}
+                placeholder="Share your experience with this product..."
+                rows={4}
+                className="w-full px-4 py-3 border border-[var(--border-color)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary-500)] resize-none"
+              />
+            </div>
+            
+            {/* Verified Purchase Badge */}
+            <div className="flex items-center gap-2 mb-4 text-sm text-green-600">
+              <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">✓</span>
+              Verified Purchase
+            </div>
+            
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setReviewModal({ isOpen: false, product: null })}
+                className="flex-1 py-3 border border-[var(--border-color)] rounded-xl font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitReview}
+                disabled={reviewForm.rating === 0 || reviewSubmitting}
+                className="flex-1 py-3 bg-[var(--primary-500)] text-white rounded-xl font-bold hover:bg-[var(--primary-600)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 
@@ -204,38 +473,54 @@ const ConsumerDashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {wishlistItems.map((item) => (
-          <div key={item.id} className="border border-[var(--border-light)] rounded-xl overflow-hidden group hover:shadow-md transition-all">
-            <div className="relative h-48 overflow-hidden">
-              <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-              <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-red-500 shadow-md hover:bg-red-50 transition-colors">
-                <FaHeart />
-              </button>
-              {!item.inStock && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                  <span className="px-3 py-1 bg-white rounded-full text-xs font-bold text-gray-800">
-                    Out of Stock
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="p-4">
-              <h4 className="font-bold text-[var(--text-primary)] mb-1">{item.name}</h4>
-              <p className="text-sm text-[var(--text-secondary)] mb-3">Sold by {item.farmer}</p>
-              <div className="flex items-center justify-between mt-auto">
-                <span className="font-bold text-[var(--primary-600)]">{item.price}</span>
-                <button
-                  disabled={!item.inStock}
-                  className="px-3 py-1.5 bg-[var(--primary-500)] text-white text-sm rounded-lg font-medium hover:bg-[var(--primary-600)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      {wishlistItems.length === 0 ? (
+        <div className="text-center py-12">
+          <FaHeart size={48} className="text-[var(--text-tertiary)] mx-auto mb-4" />
+          <p className="text-[var(--text-secondary)]">Your wishlist is empty</p>
+          <button 
+            onClick={() => navigate('/marketplace')}
+            className="mt-4 px-6 py-2 bg-[var(--primary-500)] text-white rounded-lg font-medium hover:bg-[var(--primary-600)]"
+          >
+            Browse Products
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {wishlistItems.map((item) => (
+            <div key={item.id} className="border border-[var(--border-light)] rounded-xl overflow-hidden group hover:shadow-md transition-all">
+              <div className="relative h-48 overflow-hidden">
+                <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                <button 
+                  onClick={() => toggleLikeProduct(item)}
+                  className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-red-500 shadow-md hover:bg-red-50 transition-colors"
                 >
-                  Add to Cart
+                  <FaHeart />
                 </button>
+                {!item.inStock && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <span className="px-3 py-1 bg-white rounded-full text-xs font-bold text-gray-800">
+                      Out of Stock
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="p-4">
+                <h4 className="font-bold text-[var(--text-primary)] mb-1">{item.name}</h4>
+                <p className="text-sm text-[var(--text-secondary)] mb-3">Sold by {item.farmer}</p>
+                <div className="flex items-center justify-between mt-auto">
+                  <span className="font-bold text-[var(--primary-600)]">{item.price}</span>
+                  <button
+                    disabled={!item.inStock}
+                    className="px-3 py-1.5 bg-[var(--primary-500)] text-white text-sm rounded-lg font-medium hover:bg-[var(--primary-600)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Add to Cart
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 

@@ -2,14 +2,18 @@ import React, { useState } from 'react';
 import { FaStar, FaMapMarkerAlt, FaHeart, FaShoppingCart } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { useFavorites } from '../context/FavoritesContext';
 import { useNavigate } from 'react-router-dom';
 
 const ProductCard = ({ product, onAddToCart }) => {
-  const [isWishlisted, setIsWishlisted] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
 
   const { user } = useAuth();
+  const { isProductLiked, toggleLikeProduct } = useFavorites();
   const navigate = useNavigate();
+  
+  // Check if product is liked using the context
+  const isWishlisted = isProductLiked(product.id);
 
   const handleAddToCart = async (e) => {
     e.preventDefault(); // Prevent navigation if wrapped in Link
@@ -29,7 +33,23 @@ const ProductCard = ({ product, onAddToCart }) => {
 
   const toggleWishlist = (e) => {
     e.stopPropagation();
-    setIsWishlisted(!isWishlisted);
+    e.preventDefault();
+    
+    if (!user) {
+      if (window.confirm("You must be logged in to add favorites. Would you like to login now?")) {
+        navigate('/login');
+      }
+      return;
+    }
+    
+    // Use the context to toggle like - pass the full product object
+    toggleLikeProduct({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.image,
+      category: product.category || product.badge
+    });
   };
 
   return (

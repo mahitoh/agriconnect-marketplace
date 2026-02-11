@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star } from 'lucide-react';
+import { Star, CheckCircle } from 'lucide-react';
 
 const FarmerReviewCard = ({ review }) => {
   return (
@@ -27,7 +27,7 @@ const FarmerReviewCard = ({ review }) => {
             fontSize: '16px' 
           }}
         >
-          {review.avatar}
+          {review.avatar || review.author?.charAt(0) || '?'}
         </div>
         
         {/* Content */}
@@ -37,16 +37,59 @@ const FarmerReviewCard = ({ review }) => {
             style={{ 
               display: 'flex', 
               justifyContent: 'space-between', 
-              marginBottom: '6px' 
+              alignItems: 'flex-start',
+              marginBottom: '6px',
+              flexWrap: 'wrap',
+              gap: '8px'
             }}
           >
-            <div style={{ fontSize: '15px', fontWeight: '700' }}>
-              {review.author}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '15px', fontWeight: '700' }}>
+                {review.author}
+              </span>
+              {review.verified_purchase && (
+                <span 
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '4px',
+                    fontSize: '11px', 
+                    fontWeight: '600',
+                    color: '#059669',
+                    background: '#d1fae5',
+                    padding: '2px 8px',
+                    borderRadius: '12px'
+                  }}
+                >
+                  <CheckCircle size={10} /> Verified Purchase
+                </span>
+              )}
+              {review.reviewer_role === 'farmer' && (
+                <span 
+                  style={{ 
+                    fontSize: '11px', 
+                    fontWeight: '600',
+                    color: '#2d5f3f',
+                    background: '#dcfce7',
+                    padding: '2px 8px',
+                    borderRadius: '12px'
+                  }}
+                >
+                  Farmer
+                </span>
+              )}
             </div>
             <div style={{ fontSize: '13px', color: '#9ca3af' }}>
               {review.date}
             </div>
           </div>
+          
+          {/* Product Name if available */}
+          {review.productName && (
+            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px' }}>
+              Reviewed: <span style={{ fontWeight: '500' }}>{review.productName}</span>
+            </div>
+          )}
           
           {/* Stars */}
           <div style={{ display: 'flex', gap: '2px', marginBottom: '8px' }}>

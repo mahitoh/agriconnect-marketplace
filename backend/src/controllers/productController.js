@@ -216,12 +216,34 @@ const getAllProducts = async (req, res, next) => {
       });
     }
 
+    // Fetch ratings for all products
+    const productIds = products.map(p => p.id);
+    const { data: ratingsData } = await supabaseAdmin
+      .from('product_ratings_summary')
+      .select('product_id, average_rating, total_reviews')
+      .in('product_id', productIds);
+    
+    // Create a map of product_id -> rating data
+    const ratingsMap = new Map(
+      (ratingsData || []).map(r => [r.product_id, { 
+        rating: r.average_rating ? r.average_rating.toFixed(1) : '0.0', 
+        reviews: r.total_reviews || 0 
+      }])
+    );
+    
+    // Add ratings to products
+    const productsWithRatings = products.map(product => ({
+      ...product,
+      rating: ratingsMap.get(product.id)?.rating || '0.0',
+      reviews: ratingsMap.get(product.id)?.reviews || 0
+    }));
+
     res.status(200).json({
       success: true,
       message: 'Products fetched successfully',
       data: {
-        products: products || [],
-        count: products?.length || 0
+        products: productsWithRatings || [],
+        count: productsWithRatings?.length || 0
       }
     });
   } catch (error) {

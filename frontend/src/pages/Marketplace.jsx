@@ -66,8 +66,8 @@ const Marketplace = () => {
             image: product.image_url || 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=500&h=350&fit=crop',
             badge: badge,
             badgeColor: badgeColors[badge] || '#2d5f3f',
-            rating: '4.8', // Default rating (can be fetched from reviews later)
-            reviews: '0',
+            rating: product.rating || '0.0', // Use rating from API
+            reviews: product.reviews?.toString() || '0', // Use reviews from API
             farmer: farmerName,
             location: farmerLocation,
             price: `${product.price.toLocaleString()} FCFA`,

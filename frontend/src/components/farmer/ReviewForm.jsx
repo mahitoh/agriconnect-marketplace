@@ -152,7 +152,7 @@ const ReviewForm = ({ farmerId, farmerName, products = [], onSubmit, onClose }) 
               <option value="">-- Select a product --</option>
               {products.map(product => (
                 <option key={product.id} value={product.id}>
-                  {product.name} - {product.price} CFA per {product.unit || 'unit'}
+                  {product.name}
                 </option>
               ))}
             </select>

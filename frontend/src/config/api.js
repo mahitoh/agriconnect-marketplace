@@ -39,6 +39,13 @@ export const API_ENDPOINTS = {
   REVIEWS_FARMER: (farmerId) => `${API_BASE_URL}/api/reviews/farmer/${farmerId}`,
   REVIEWS_PRODUCT: (productId) => `${API_BASE_URL}/api/reviews/product/${productId}`,
   REVIEW_BY_ID: (id) => `${API_BASE_URL}/api/reviews/${id}`,
+  REVIEW_CAN_REVIEW: (productId) => `${API_BASE_URL}/api/reviews/can-review/${productId}`,
+  REVIEW_MY_REVIEWABLE: `${API_BASE_URL}/api/reviews/my-reviewable-products`,
+
+  // Order endpoints
+  ORDERS: `${API_BASE_URL}/api/orders`,
+  MY_ORDERS: `${API_BASE_URL}/api/orders/my-orders`,
+  ORDER_BY_ID: (id) => `${API_BASE_URL}/api/orders/${id}`,
 
   // Favorites endpoints
   FAVORITES: `${API_BASE_URL}/api/favorites`,
