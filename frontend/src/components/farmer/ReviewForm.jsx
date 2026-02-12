@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Star, Send, X, Package } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
+import { authFetch } from '../../utils/authFetch';
 
 const ReviewForm = ({ farmerId, farmerName, products = [], onSubmit, onClose }) => {
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -44,13 +45,10 @@ const ReviewForm = ({ farmerId, farmerName, products = [], onSubmit, onClose }) 
     setError('');
 
     try {
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch(API_ENDPOINTS.REVIEWS, {
+      const response = await authFetch(API_ENDPOINTS.REVIEWS, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           productId: selectedProductId,

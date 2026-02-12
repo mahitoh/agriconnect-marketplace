@@ -30,6 +30,7 @@ import Footer from '../../components/layout/Footer';
 import Input from '../../components/ui/input';
 import { useAuth } from '../../context/AuthContext';
 import { API_ENDPOINTS } from '../../config/api';
+import { authFetch } from '../../utils/authFetch';
 import { allCities } from '../../data/cameroonCities';
 import {
   farmerSummary,
@@ -147,10 +148,8 @@ const FarmerDashboard = () => {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(API_ENDPOINTS.FARMER_PRODUCTS, {
+      const response = await authFetch(API_ENDPOINTS.FARMER_PRODUCTS, {
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -189,9 +188,8 @@ const FarmerDashboard = () => {
         return;
       }
 
-      const response = await fetch(API_ENDPOINTS.PROFILE, {
+      const response = await authFetch(API_ENDPOINTS.PROFILE, {
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -400,15 +398,11 @@ const FarmerDashboard = () => {
 
     setUploadingImage(true);
     try {
-      const token = localStorage.getItem('token');
       const formData = new FormData();
       formData.append('image', productImage);
 
-      const response = await fetch(API_ENDPOINTS.UPLOAD_PRODUCT_IMAGE, {
+      const response = await authFetch(API_ENDPOINTS.UPLOAD_PRODUCT_IMAGE, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
         body: formData
       });
 
@@ -453,7 +447,6 @@ const FarmerDashboard = () => {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
       const productData = {
         name: productForm.name,
         category: productForm.category,
@@ -469,10 +462,9 @@ const FarmerDashboard = () => {
         : API_ENDPOINTS.PRODUCTS;
       const method = editingProduct ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await authFetch(url, {
         method,
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(productData)
@@ -524,8 +516,6 @@ const FarmerDashboard = () => {
     setProfileLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-      
       console.log('🔄 Starting profile save...');
       console.log('📷 Avatar file:', avatarFile ? 'Yes' : 'No');
       console.log('🖼️ Banner file:', bannerFile ? 'Yes' : 'No');
@@ -539,9 +529,8 @@ const FarmerDashboard = () => {
         const formData = new FormData();
         formData.append('image', avatarFile);
         // Use profile upload endpoint with type=avatar
-        const uploadRes = await fetch(`${API_ENDPOINTS.PROFILE_UPLOAD_IMAGE}?type=avatar`, {
+        const uploadRes = await authFetch(`${API_ENDPOINTS.PROFILE_UPLOAD_IMAGE}?type=avatar`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
           body: formData
         });
         if (uploadRes.ok) {
@@ -560,9 +549,8 @@ const FarmerDashboard = () => {
         const formData = new FormData();
         formData.append('image', bannerFile);
         // Use profile upload endpoint with type=banner
-        const uploadRes = await fetch(`${API_ENDPOINTS.PROFILE_UPLOAD_IMAGE}?type=banner`, {
+        const uploadRes = await authFetch(`${API_ENDPOINTS.PROFILE_UPLOAD_IMAGE}?type=banner`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
           body: formData
         });
         if (uploadRes.ok) {
@@ -578,10 +566,9 @@ const FarmerDashboard = () => {
       console.log('   avatarUrl:', avatarUrl);
       console.log('   bannerUrl:', bannerUrl);
 
-      const response = await fetch(API_ENDPOINTS.PROFILE, {
+      const response = await authFetch(API_ENDPOINTS.PROFILE, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -655,11 +642,9 @@ const FarmerDashboard = () => {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(API_ENDPOINTS.PRODUCT_BY_ID(productId), {
+      const response = await authFetch(API_ENDPOINTS.PRODUCT_BY_ID(productId), {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });

@@ -25,6 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useFavorites } from '../../context/FavoritesContext';
 import { API_ENDPOINTS } from '../../config/api';
 import { consumerSummary, consumerRecentOrders, consumerSuggestions } from '../../data/dashboardMock';
+import { authFetch } from '../../utils/authFetch';
 
 const SECTIONS = {
   DASHBOARD: 'dashboard',
@@ -44,6 +45,8 @@ const ConsumerDashboard = () => {
   // Orders state
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [orderDetailsModal, setOrderDetailsModal] = useState(false);
   
   // Reviewable products state
   const [reviewableProducts, setReviewableProducts] = useState([]);
@@ -66,10 +69,7 @@ const ConsumerDashboard = () => {
   const fetchOrders = async () => {
     setOrdersLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(API_ENDPOINTS.MY_ORDERS, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await authFetch(API_ENDPOINTS.MY_ORDERS);
       if (response.ok) {
         const data = await response.json();
         setOrders(data.data?.orders || []);
@@ -83,48 +83,49 @@ const ConsumerDashboard = () => {
 
   const fetchReviewableProducts = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      
-      // For testing: Fetch all products since payment isn't implemented yet
-      // TODO: Switch back to REVIEW_MY_REVIEWABLE after payment is implemented
-      const response = await fetch(API_ENDPOINTS.PRODUCTS);
+      const response = await authFetch(API_ENDPOINTS.REVIEW_MY_REVIEWABLE);
       if (response.ok) {
         const data = await response.json();
-        const products = data.data?.products || data.products || [];
-        // Transform to match expected format
-        const formattedProducts = products.slice(0, 6).map(p => ({
-          productId: p.id,
-          productName: p.name,
-          productImage: p.image_url,
-          farmerId: p.farmer_id,
-          farmerName: p.profiles?.full_name || p.farmer_name || 'Farmer'
-        }));
-        setReviewableProducts(formattedProducts);
+        const products = data.data?.products || [];
+        setReviewableProducts(products);
       }
     } catch (error) {
       console.error('Error fetching reviewable products:', error);
+      setReviewableProducts([]);
     }
   };
 
   const handleSubmitReview = async () => {
-    if (!reviewModal.product || reviewForm.rating === 0) return;
+    if (!reviewModal.product || reviewForm.rating === 0) {
+      alert('Please select a rating');
+      return;
+    }
+
+    // Validate that we have required fields
+    if (!reviewModal.product.farmerId) {
+      console.error('Missing farmerId:', reviewModal.product);
+      alert('Error: Farmer information not loaded. Please try again.');
+      return;
+    }
     
     setReviewSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(API_ENDPOINTS.REVIEWS, {
+      const payload = {
+        productId: reviewModal.product.productId,
+        farmerId: reviewModal.product.farmerId,
+        rating: reviewForm.rating,
+        comment: reviewForm.comment,
+        orderItemId: reviewModal.product.orderItemId
+      };
+
+      console.log('Submitting review with payload:', payload);
+
+      const response = await authFetch(API_ENDPOINTS.REVIEWS, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          productId: reviewModal.product.productId,
-          farmerId: reviewModal.product.farmerId,
-          rating: reviewForm.rating,
-          comment: reviewForm.comment
-        })
+        body: JSON.stringify(payload)
       });
       
       const data = await response.json();
@@ -134,6 +135,7 @@ const ConsumerDashboard = () => {
         setReviewForm({ rating: 0, comment: '' });
         fetchReviewableProducts(); // Refresh the list
       } else {
+        console.error('Review submission error:', data);
         alert(data.message || 'Failed to submit review');
       }
     } catch (error) {
@@ -289,8 +291,8 @@ const ConsumerDashboard = () => {
               <FaStar className="text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-[var(--text-primary)]">Review Products (Test Mode)</h3>
-              <p className="text-sm text-[var(--text-secondary)]">Test mode: You can review any product without purchase verification</p>
+              <h3 className="text-lg font-bold text-[var(--text-primary)]">Review Products</h3>
+              <p className="text-sm text-[var(--text-secondary)]">Share your feedback on products you've purchased</p>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -363,13 +365,46 @@ const ConsumerDashboard = () => {
                 {order.order_items && order.order_items.length > 0 && (
                   <div className="space-y-2 mb-3">
                     {order.order_items.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-3 text-sm">
-                        {item.products?.image_url && (
-                          <img src={item.products.image_url} alt={item.products?.name} className="w-10 h-10 rounded-lg object-cover" />
+                      <div key={idx} className="flex items-center justify-between gap-3 text-sm p-2 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          {item.products?.image_url && (
+                            <img src={item.products.image_url} alt={item.products?.name} className="w-10 h-10 rounded-lg object-cover" />
+                          )}
+                          <span className="text-[var(--text-secondary)] truncate">
+                            {item.products?.name || 'Product'} × {item.quantity}
+                          </span>
+                        </div>
+                        {/* Review Button for Order Items */}
+                        {item.products && (
+                          <button
+                            onClick={() => {
+                              // Handle profiles as either object or array
+                              const profileData = Array.isArray(item.products.profiles) 
+                                ? item.products.profiles[0] 
+                                : item.products.profiles;
+                              
+                              const farmerName = profileData?.full_name || item.products.farmer_name || 'Farmer';
+                              // Use farmer_id from products, fallback to order_items if needed
+                              const farmerId = item.products.farmer_id || item.farmer_id;
+                              
+                              setReviewModal({ 
+                                isOpen: true, 
+                                product: {
+                                  productId: item.products.id,
+                                  productName: item.products.name,
+                                  productImage: item.products.image_url,
+                                  farmerId: farmerId,
+                                  farmerName: farmerName,
+                                  orderItemId: item.id
+                                }
+                              });
+                              setReviewForm({ rating: 0, comment: '' });
+                            }}
+                            className="px-2 py-1 bg-yellow-400 text-white text-xs font-bold rounded hover:bg-yellow-500 transition-colors whitespace-nowrap"
+                          >
+                            Review
+                          </button>
                         )}
-                        <span className="text-[var(--text-secondary)]">
-                          {item.products?.name || 'Product'} × {item.quantity}
-                        </span>
                       </div>
                     ))}
                   </div>
@@ -382,7 +417,13 @@ const ConsumerDashboard = () => {
                     })}
                   </p>
                   <div className="flex gap-2">
-                    <button className="px-3 py-1.5 border border-[var(--border-color)] rounded-lg text-xs font-medium hover:bg-gray-50">
+                    <button 
+                      onClick={() => {
+                        setSelectedOrder(order);
+                        setOrderDetailsModal(true);
+                      }}
+                      className="px-3 py-1.5 border border-[var(--border-color)] rounded-lg text-xs font-medium hover:bg-gray-50"
+                    >
                       View Details
                     </button>
                   </div>
@@ -456,6 +497,107 @@ const ConsumerDashboard = () => {
                 className="flex-1 py-3 bg-[var(--primary-500)] text-white rounded-xl font-bold hover:bg-[var(--primary-600)] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Order Details Modal */}
+      {orderDetailsModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+                Order #{selectedOrder.id.slice(0, 8)}
+              </h2>
+              <button
+                onClick={() => setOrderDetailsModal(false)}
+                className="text-2xl text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Order Status */}
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-[var(--text-secondary)] mb-1">Status</p>
+              <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${
+                selectedOrder.status === 'completed' || selectedOrder.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                selectedOrder.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                selectedOrder.status === 'pending_payment' ? 'bg-yellow-100 text-yellow-700' :
+                selectedOrder.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                'bg-gray-100 text-gray-700'
+              }`}>
+                {selectedOrder.status?.replace(/_/g, ' ').charAt(0).toUpperCase() + selectedOrder.status?.slice(1).replace(/_/g, ' ')}
+              </span>
+            </div>
+
+            {/* Order Items */}
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4">Items</h3>
+              <div className="space-y-3">
+                {selectedOrder.order_items?.map((item, idx) => (
+                  <div key={idx} className="flex gap-4 p-3 bg-gray-50 rounded-lg">
+                    {item.products?.image_url && (
+                      <img 
+                        src={item.products.image_url} 
+                        alt={item.products?.name} 
+                        className="w-16 h-16 rounded-lg object-cover"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <p className="font-semibold text-[var(--text-primary)]">{item.products?.name || 'Product'}</p>
+                      <p className="text-sm text-[var(--text-secondary)]">
+                        Quantity: {item.quantity} × {item.unit_price?.toLocaleString()} = {item.line_total?.toLocaleString()} FCFA
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Order Total */}
+            <div className="mb-6 p-4 bg-green-50 border-t-2 border-green-300 rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-[var(--text-primary)]">Total Amount</span>
+                <span className="text-2xl font-bold text-green-600">
+                  {selectedOrder.total_amount?.toLocaleString()} FCFA
+                </span>
+              </div>
+            </div>
+
+            {/* Delivery Info */}
+            {selectedOrder.delivery_address && (
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-[var(--text-primary)] mb-3">Delivery Information</h3>
+                <div className="space-y-2 text-sm">
+                  <p><span className="font-semibold text-[var(--text-primary)]">Name:</span> {selectedOrder.delivery_name}</p>
+                  <p><span className="font-semibold text-[var(--text-primary)]">Phone:</span> {selectedOrder.delivery_phone}</p>
+                  <p><span className="font-semibold text-[var(--text-primary)]">Address:</span> {selectedOrder.delivery_address}</p>
+                  <p><span className="font-semibold text-[var(--text-primary)]">City:</span> {selectedOrder.delivery_city}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Order Date */}
+            <div className="text-xs text-[var(--text-tertiary)] mb-6 pb-6 border-b border-[var(--border-light)]">
+              Placed on {new Date(selectedOrder.created_at).toLocaleDateString('en-US', { 
+                year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+              })}
+            </div>
+
+            {/* Close Button */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setOrderDetailsModal(false)}
+                className="flex-1 py-3 border border-[var(--border-color)] rounded-lg font-medium hover:bg-gray-50"
+              >
+                Close
               </button>
             </div>
           </motion.div>

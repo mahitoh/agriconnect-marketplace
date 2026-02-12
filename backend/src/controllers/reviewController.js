@@ -77,7 +77,7 @@ const createReview = async (req, res, next) => {
       // }
 
       // Check if customer already reviewed this product
-      const { data: existingReview } = await supabase
+      const { data: existingReview } = await supabaseAdmin
         .from('reviews')
         .select('id')
         .eq('product_id', productId)
@@ -94,7 +94,7 @@ const createReview = async (req, res, next) => {
 
     // Prevent farmers from reviewing their own products
     if (productId) {
-      const { data: product } = await supabase
+      const { data: product } = await supabaseAdmin
         .from('products')
         .select('farmer_id')
         .eq('id', productId)
@@ -533,7 +533,7 @@ const getReviewableProducts = async (req, res, next) => {
     }
 
     // Get existing reviews by this customer
-    const { data: existingReviews } = await supabase
+    const { data: existingReviews } = await supabaseAdmin
       .from('reviews')
       .select('product_id')
       .eq('customer_id', customerId);

@@ -44,8 +44,18 @@ export const API_ENDPOINTS = {
 
   // Order endpoints
   ORDERS: `${API_BASE_URL}/api/orders`,
-  MY_ORDERS: `${API_BASE_URL}/api/orders/my-orders`,
+  MY_ORDERS: `${API_BASE_URL}/api/orders`,
   ORDER_BY_ID: (id) => `${API_BASE_URL}/api/orders/${id}`,
+  VALIDATE_CART: `${API_BASE_URL}/api/orders/validate-cart`,
+  CHECKOUT: `${API_BASE_URL}/api/orders/checkout`,
+  CONFIRM_PAYMENT: `${API_BASE_URL}/api/orders/confirm-payment`,
+  CONFIRM_COD: `${API_BASE_URL}/api/orders/confirm-cod`,
+  FARMER_ORDERS: `${API_BASE_URL}/api/orders/farmer`,
+  ORDER_STATUS: (id) => `${API_BASE_URL}/api/orders/${id}/status`,
+
+  // Payment endpoints
+  PAYMENT_INITIATE: `${API_BASE_URL}/api/payment/initiate`,
+  PAYMENT_STATUS: (refId) => `${API_BASE_URL}/api/payment/status/${refId}`,
 
   // Favorites endpoints
   FAVORITES: `${API_BASE_URL}/api/favorites`,

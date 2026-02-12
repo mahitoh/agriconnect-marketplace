@@ -82,10 +82,10 @@ router.get('/me', authenticate, getProfile);
 
 /**
  * @route   POST /api/auth/refresh
- * @desc    Refresh access token
- * @access  Private
+ * @desc    Refresh access token (accepts expired token)
+ * @access  Public (validates token signature internally)
  */
-router.post('/refresh', authenticate, refreshToken);
+router.post('/refresh', refreshToken);
 
 /**
  * @route   POST /api/auth/promote-admin

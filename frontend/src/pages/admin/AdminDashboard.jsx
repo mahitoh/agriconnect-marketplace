@@ -27,6 +27,7 @@ import Input from '../../components/ui/input';
 import { useAuth } from '../../context/AuthContext';
 import { API_ENDPOINTS } from '../../config/api';
 import { adminSummary, adminRecentActivity, adminTopFarmers } from '../../data/dashboardMock';
+import { authFetch } from '../../utils/authFetch';
 
 const SECTIONS = {
   OVERVIEW: 'overview',
@@ -84,11 +85,9 @@ const AdminDashboard = () => {
       setLoadingUsers(true);
       setUsersError(null);
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(API_ENDPOINTS.ADMIN_USERS, {
+        const response = await authFetch(API_ENDPOINTS.ADMIN_USERS, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
@@ -121,11 +120,9 @@ const AdminDashboard = () => {
     setLoadingUserDetails(true);
     setUserDetailsError(null);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_ENDPOINTS.ADMIN_USERS}/${userId}`, {
+      const response = await authFetch(`${API_ENDPOINTS.ADMIN_USERS}/${userId}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -156,11 +153,9 @@ const AdminDashboard = () => {
     
     setSuspendLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_ENDPOINTS.ADMIN_USERS}/${suspendModal.user.id}/suspend`, {
+      const response = await authFetch(`${API_ENDPOINTS.ADMIN_USERS}/${suspendModal.user.id}/suspend`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -200,11 +195,9 @@ const AdminDashboard = () => {
     if (!farmerAction?.farmer) return;
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_ENDPOINTS.ADMIN_APPROVE_FARMER}/${farmerAction.farmer.id}/approve`, {
+      const response = await authFetch(`${API_ENDPOINTS.ADMIN_APPROVE_FARMER}/${farmerAction.farmer.id}/approve`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -232,11 +225,9 @@ const AdminDashboard = () => {
     if (!farmerAction?.farmer) return;
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_ENDPOINTS.ADMIN_REJECT_FARMER}/${farmerAction.farmer.id}/reject`, {
+      const response = await authFetch(`${API_ENDPOINTS.ADMIN_REJECT_FARMER}/${farmerAction.farmer.id}/reject`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -264,11 +255,9 @@ const AdminDashboard = () => {
 
     setAdminLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_ENDPOINTS.ADMIN_USERS}/${selectedAdminUserId}/promote`, {
+      const response = await authFetch(`${API_ENDPOINTS.ADMIN_USERS}/${selectedAdminUserId}/promote`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -307,11 +296,9 @@ const AdminDashboard = () => {
   const handleEditProfile = async () => {
     setEditLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(API_ENDPOINTS.PROFILE, {
+      const response = await authFetch(API_ENDPOINTS.PROFILE, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(editData)
@@ -338,11 +325,9 @@ const AdminDashboard = () => {
       setLoadingFarmers(true);
       setFarmerError(null);
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(API_ENDPOINTS.ADMIN_PENDING_FARMERS, {
+        const response = await authFetch(API_ENDPOINTS.ADMIN_PENDING_FARMERS, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });

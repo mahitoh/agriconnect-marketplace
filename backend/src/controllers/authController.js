@@ -308,33 +308,58 @@ const getProfile = async (req, res) => {
 /**
  * Refresh access token
  * POST /api/auth/refresh
+ * Accepts an expired JWT, verifies signature (ignoring expiry), issues a fresh token.
+ * No authenticate middleware needed — the whole point is the token IS expired.
  */
 const refreshToken = async (req, res) => {
   try {
-    const { data, error } = await supabase.auth.refreshSession();
-
-    if (error) {
-      return res.status(401).json({
-        success: false,
-        message: 'Failed to refresh token.'
-      });
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'No token provided.' });
     }
 
-    const token = generateToken(data.user);
+    const oldToken = authHeader.substring(7);
+
+    // Verify signature but IGNORE expiration
+    let decoded;
+    try {
+      decoded = jwt.verify(oldToken, process.env.JWT_SECRET, { ignoreExpiration: true });
+    } catch (err) {
+      return res.status(401).json({ success: false, message: 'Invalid token — please login again.' });
+    }
+
+    // Don't refresh tokens older than 30 days (even with ignoreExpiration)
+    const tokenAge = Math.floor(Date.now() / 1000) - (decoded.iat || 0);
+    const MAX_REFRESH_WINDOW = 30 * 24 * 60 * 60; // 30 days
+    if (tokenAge > MAX_REFRESH_WINDOW) {
+      return res.status(401).json({ success: false, message: 'Token too old — please login again.' });
+    }
+
+    // Verify user still exists in database
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email, role')
+      .eq('id', decoded.id)
+      .single();
+
+    if (!profile) {
+      return res.status(401).json({ success: false, message: 'User no longer exists.' });
+    }
+
+    // Issue a fresh token
+    const newToken = generateToken({
+      id: profile.id,
+      email: profile.email,
+      user_metadata: { role: profile.role }
+    });
 
     res.status(200).json({
       success: true,
-      data: {
-        token
-      }
+      data: { token: newToken }
     });
   } catch (error) {
     console.error('Refresh token error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Token refresh failed.',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Token refresh failed.' });
   }
 };
 

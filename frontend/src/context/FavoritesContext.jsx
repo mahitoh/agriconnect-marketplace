@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { API_ENDPOINTS } from '../config/api';
+import { authFetch } from '../utils/authFetch';
 
 const FavoritesContext = createContext();
 
@@ -39,11 +40,7 @@ export const FavoritesProvider = ({ children }) => {
       const token = localStorage.getItem('token');
       if (!token) return; // Not logged in
 
-      const response = await fetch(API_ENDPOINTS.FAVORITES, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await authFetch(API_ENDPOINTS.FAVORITES);
 
       if (response.ok) {
         const data = await response.json();
@@ -110,11 +107,8 @@ export const FavoritesProvider = ({ children }) => {
     try {
       if (isLiked) {
         // Remove from favorites
-        const response = await fetch(API_ENDPOINTS.FAVORITES_REMOVE(product.id), {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        const response = await authFetch(API_ENDPOINTS.FAVORITES_REMOVE(product.id), {
+          method: 'DELETE'
         });
 
         if (response.ok) {
@@ -126,11 +120,10 @@ export const FavoritesProvider = ({ children }) => {
         }
       } else {
         // Add to favorites
-        const response = await fetch(API_ENDPOINTS.FAVORITES, {
+        const response = await authFetch(API_ENDPOINTS.FAVORITES, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({ productId: product.id })
         });

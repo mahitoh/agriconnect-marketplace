@@ -14,6 +14,8 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const marketplaceRoutes = require('./routes/marketplaceRoutes');
 const moderationRoutes = require('./routes/moderationRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const cartRoutes = require('./routes/cartRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 
 // Initialize Express app
@@ -66,6 +68,8 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/cart', cartRoutes);
 
 // 404 Handler - Must be after all routes
 app.use(notFound);

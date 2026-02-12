@@ -1,6 +1,9 @@
 const express = require('express');
 const {
-  createOrder,
+  validateCart,
+  checkout,
+  confirmPayment,
+  confirmCOD,
   getMyOrders,
   getFarmerOrders,
   getOrderById,
@@ -10,20 +13,23 @@ const { authenticate, authorize, authorizeRole } = require('../middleware/auth')
 
 const router = express.Router();
 
-// Customer checkout
-router.post('/', authenticate, authorizeRole('customer'), createOrder);
+// ── Checkout flow ──
+router.post('/validate-cart', authenticate, authorizeRole('customer'), validateCart);
+router.post('/checkout', authenticate, authorizeRole('customer'), checkout);
+router.post('/confirm-payment', authenticate, authorizeRole('customer'), confirmPayment);
+router.post('/confirm-cod', authenticate, authorizeRole('customer'), confirmCOD);
 
-// Customer order history
+// ── Customer order history ──
 router.get('/', authenticate, authorizeRole('customer'), getMyOrders);
 
-// Farmer order items
+// ── Farmer orders ──
 router.get('/farmer', authenticate, authorizeRole('farmer'), getFarmerOrders);
 
-// Order details (customer, farmer, admin)
+// ── Order details (customer, farmer, admin) ──
 router.get('/:id', authenticate, getOrderById);
 
-// Admin updates order status
-router.put('/:id/status', authenticate, authorize('admin'), updateOrderStatus);
+// ── Update order status (farmer + admin) ──
+router.put('/:id/status', authenticate, updateOrderStatus);
 
 module.exports = router;
 
