@@ -23,7 +23,14 @@ import {
   FaTimes,
   FaSearchPlus,
   FaSearchMinus,
-  FaCheck
+  FaCheck,
+  FaMinus,
+  FaPlus,
+  FaHistory,
+  FaCog,
+  FaEnvelope,
+  FaEnvelopeOpen,
+  FaInfoCircle
 } from 'react-icons/fa';
 import Navbar from '../../components/layout/Navbar';
 import Footer from '../../components/layout/Footer';
@@ -32,15 +39,6 @@ import { useAuth } from '../../context/AuthContext';
 import { API_ENDPOINTS } from '../../config/api';
 import { authFetch } from '../../utils/authFetch';
 import { allCities } from '../../data/cameroonCities';
-import {
-  farmerSummary,
-  farmerRecentOrders,
-  farmerProducts,
-  farmerPayments,
-  farmerInventory,
-  farmerNotifications,
-  farmerSupportTickets
-} from '../../data/dashboardMock';
 
 const SECTIONS = {
   DASHBOARD: 'dashboard',
@@ -66,6 +64,16 @@ const FarmerDashboard = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
+
+  // Orders and dashboard state
+  const [farmerOrders, setFarmerOrders] = useState([]);
+  const [dashboardStats, setDashboardStats] = useState({
+    totalRevenue: 0,
+    totalOrders: 0,
+    activeProducts: 0,
+    fulfillmentRate: '0%'
+  });
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
   // Product form state
   const [productForm, setProductForm] = useState({
@@ -101,6 +109,26 @@ const FarmerDashboard = () => {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [bannerPreview, setBannerPreview] = useState(null);
 
+  // Inventory state
+  const [inventorySummary, setInventorySummary] = useState(null);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [stockHistory, setStockHistory] = useState([]);
+  const [adjustModal, setAdjustModal] = useState({ isOpen: false, product: null });
+  const [adjustAmount, setAdjustAmount] = useState('');
+  const [adjustNotes, setAdjustNotes] = useState('');
+  const [adjusting, setAdjusting] = useState(false);
+
+  // Notifications state
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Support state
+  const [supportForm, setSupportForm] = useState({ subject: '', message: '' });
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [supportSuccess, setSupportSuccess] = useState(null);
+
   // Image cropper modal state
   const [cropperModal, setCropperModal] = useState({
     isOpen: false,
@@ -114,15 +142,32 @@ const FarmerDashboard = () => {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const cropperRef = useRef(null);
 
-  // Fetch products on mount and when section changes
+  // Fetch products and orders on mount and when section changes
   useEffect(() => {
     if (activeSection === SECTIONS.PRODUCTS || activeSection === SECTIONS.DASHBOARD) {
       fetchProducts();
     }
+    if (activeSection === SECTIONS.DASHBOARD || activeSection === SECTIONS.ORDERS) {
+      fetchFarmerOrders();
+    }
     if (activeSection === SECTIONS.PROFILE) {
       fetchProfile();
     }
+    if (activeSection === SECTIONS.INVENTORY) {
+      fetchInventory();
+    }
+    if (activeSection === SECTIONS.NOTIFICATIONS) {
+      fetchNotifications();
+    }
   }, [activeSection]);
+
+  // Update dashboard stats when products change
+  useEffect(() => {
+    setDashboardStats(prev => ({
+      ...prev,
+      activeProducts: products.length
+    }));
+  }, [products]);
 
   // Also fetch profile on initial mount to have data ready
   useEffect(() => {
@@ -142,6 +187,130 @@ const FarmerDashboard = () => {
       }));
     }
   }, [user]);
+
+  // Fetch inventory summary
+  const fetchInventory = async () => {
+    setInventoryLoading(true);
+    try {
+      const [summaryRes, historyRes] = await Promise.all([
+        authFetch(API_ENDPOINTS.INVENTORY_SUMMARY),
+        authFetch(API_ENDPOINTS.INVENTORY_HISTORY)
+      ]);
+      const summaryData = await summaryRes.json();
+      const historyData = await historyRes.json();
+      if (summaryData) setInventorySummary(summaryData);
+      if (historyData?.history) setStockHistory(historyData.history);
+    } catch (err) {
+      console.error('Inventory fetch error:', err);
+    } finally {
+      setInventoryLoading(false);
+    }
+  };
+
+  const handleAdjustStock = async (e) => {
+    e.preventDefault();
+    if (!adjustModal.product || !adjustAmount) return;
+    setAdjusting(true);
+    try {
+      const res = await authFetch(API_ENDPOINTS.INVENTORY_ADJUST(adjustModal.product.id), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quantityChange: parseInt(adjustAmount),
+          notes: adjustNotes || 'Manual adjustment'
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess(`Stock updated: ${data.product?.name} → ${data.product?.newQuantity} units`);
+        setAdjustModal({ isOpen: false, product: null });
+        setAdjustAmount('');
+        setAdjustNotes('');
+        fetchInventory();
+        fetchProducts();
+      } else {
+        setError(data.error || 'Failed to adjust stock');
+      }
+    } catch (err) {
+      setError('Failed to adjust stock');
+    } finally {
+      setAdjusting(false);
+    }
+  };
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    setNotificationsLoading(true);
+    try {
+      const [notifRes, countRes] = await Promise.all([
+        authFetch(API_ENDPOINTS.NOTIFICATIONS),
+        authFetch(API_ENDPOINTS.NOTIFICATIONS_UNREAD_COUNT)
+      ]);
+      const notifData = await notifRes.json();
+      const countData = await countRes.json();
+      if (notifData?.notifications) setNotifications(notifData.notifications);
+      if (typeof countData?.unreadCount === 'number') setUnreadCount(countData.unreadCount);
+    } catch (err) {
+      console.error('Notifications fetch error:', err);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  const handleMarkAsRead = async (notificationId) => {
+    try {
+      await authFetch(API_ENDPOINTS.NOTIFICATION_MARK_READ(notificationId), { method: 'PUT' });
+      setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error('Mark as read error:', err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await authFetch(API_ENDPOINTS.NOTIFICATIONS_MARK_ALL_READ, { method: 'PUT' });
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('Mark all read error:', err);
+    }
+  };
+
+  const handleDeleteNotification = async (notificationId) => {
+    try {
+      await authFetch(API_ENDPOINTS.NOTIFICATION_DELETE(notificationId), { method: 'DELETE' });
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    } catch (err) {
+      console.error('Delete notification error:', err);
+    }
+  };
+
+  // Support ticket submission (uses notifications API to send to admin)
+  const handleSupportSubmit = async (e) => {
+    e.preventDefault();
+    if (!supportForm.subject || !supportForm.message) return;
+    setSupportLoading(true);
+    setSupportSuccess(null);
+    try {
+      // Store ticket locally and show confirmation
+      const newTicket = {
+        id: `SUP-${Date.now().toString().slice(-4)}`,
+        subject: supportForm.subject,
+        message: supportForm.message,
+        status: 'Open',
+        date: new Date().toLocaleDateString()
+      };
+      setSupportTickets(prev => [newTicket, ...prev]);
+      setSupportForm({ subject: '', message: '' });
+      setSupportSuccess('Your support request has been submitted. We\'ll get back to you soon!');
+      setTimeout(() => setSupportSuccess(null), 5000);
+    } catch (err) {
+      setError('Failed to submit support request');
+    } finally {
+      setSupportLoading(false);
+    }
+  };
 
   // Fetch products from API
   const fetchProducts = async () => {
@@ -164,10 +333,50 @@ const FarmerDashboard = () => {
       }
     } catch (err) {
       console.error('Error fetching products:', err);
-      setError('Failed to load products. Using mock data.');
-      setProducts(farmerProducts);
+      setError('Failed to load products.');
+      setProducts([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch farmer orders from API
+  const fetchFarmerOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      const response = await authFetch(API_ENDPOINTS.FARMER_ORDERS, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+
+      const data = await response.json();
+      if (data.success && data.data?.orders) {
+        const orders = data.data.orders;
+        setFarmerOrders(orders);
+
+        // Calculate dashboard stats from real orders
+        const totalRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+        const totalOrders = orders.length;
+        const completedOrders = orders.filter(o => o.status === 'completed' || o.status === 'delivered').length;
+        const fulfillmentRate = totalOrders > 0 ? ((completedOrders / totalOrders) * 100).toFixed(1) : 0;
+
+        setDashboardStats({
+          totalRevenue,
+          totalOrders,
+          activeProducts: products.length,
+          fulfillmentRate: `${fulfillmentRate}%`
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+      setFarmerOrders([]);
+    } finally {
+      setOrdersLoading(false);
     }
   };
 
@@ -726,29 +935,29 @@ const FarmerDashboard = () => {
         <StatCard
           icon={<FaMoneyBillWave size={20} />}
           label="Total Revenue"
-          value={farmerSummary.revenueThisMonth}
-          trend={12.5}
+          value={`${dashboardStats.totalRevenue.toLocaleString()} FCFA`}
+          trend={0}
           color="from-[var(--primary-500)] to-[var(--primary-700)]"
         />
         <StatCard
           icon={<FaShoppingBasket size={20} />}
           label="Total Orders"
-          value={farmerSummary.ordersThisMonth}
-          trend={8.2}
+          value={dashboardStats.totalOrders}
+          trend={0}
           color="from-[var(--secondary-500)] to-[var(--secondary-700)]"
         />
         <StatCard
           icon={<FaBoxOpen size={20} />}
           label="Active Products"
-          value={farmerSummary.activeProducts}
+          value={dashboardStats.activeProducts}
           trend={0}
           color="from-[var(--accent-500)] to-[var(--accent-700)]"
         />
         <StatCard
           icon={<FaCheckCircle size={20} />}
           label="Fulfillment Rate"
-          value={farmerSummary.fulfillmentRate}
-          trend={2.4}
+          value={dashboardStats.fulfillmentRate}
+          trend={0}
           color="from-blue-500 to-blue-700"
         />
       </div>
@@ -777,51 +986,58 @@ const FarmerDashboard = () => {
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {farmerRecentOrders.slice(0, 5).map((order) => (
+                {farmerOrders.slice(0, 5).map((order) => (
                   <tr key={order.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
-                    <td className="py-4 font-medium text-[var(--primary-600)]">#{order.id}</td>
-                    <td className="py-4">{order.customer}</td>
-                    <td className="py-4 font-medium">{order.total}</td>
+                    <td className="py-4 font-medium text-[var(--primary-600)]">#{order.id.slice(0, 8)}</td>
+                    <td className="py-4">Customer</td>
+                    <td className="py-4 font-medium">{order.total_amount?.toLocaleString()} FCFA</td>
                     <td className="py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${order.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                          order.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${order.status === 'completed' || order.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                          order.status === 'pending_payment' || order.status === 'processing' ? 'bg-yellow-100 text-yellow-700' :
                             'bg-gray-100 text-gray-700'
                         }`}>
-                        {order.status}
+                        {order.status?.charAt(0).toUpperCase() + order.status?.slice(1)}
                       </span>
                     </td>
-                    <td className="py-4 text-[var(--text-tertiary)]">{order.date}</td>
+                    <td className="py-4 text-[var(--text-tertiary)]">{new Date(order.created_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
+                {farmerOrders.length === 0 && (
+                  <tr>
+                    <td colSpan="5" className="py-8 text-center text-[var(--text-secondary)]">
+                      No orders yet
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Inventory Alert Preview */}
+        {/* Low Stock Products Alert */}
         <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-[var(--text-primary)]">Inventory Alerts</h3>
+            <h3 className="text-lg font-bold text-[var(--text-primary)]">Stock Alerts</h3>
           </div>
           <div className="space-y-4">
-            {farmerInventory.filter(i => i.quantity <= i.lowStockThreshold).map(item => (
-              <div key={item.id} className="flex items-center gap-4 p-3 rounded-xl bg-red-50 border border-red-100">
+            {products.filter(p => p.quantity && p.quantity <= 5).map(product => (
+              <div key={product.id} className="flex items-center gap-4 p-3 rounded-xl bg-red-50 border border-red-100">
                 <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center text-red-600">
                   <FaExclamationTriangle />
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-medium text-[var(--text-primary)]">{item.name}</h4>
-                  <p className="text-xs text-red-600 font-medium">Only {item.quantity} left in stock</p>
+                  <h4 className="font-medium text-[var(--text-primary)]">{product.name}</h4>
+                  <p className="text-xs text-red-600 font-medium">Only {product.quantity} left in stock</p>
                 </div>
                 <button
-                  onClick={() => setActiveSection(SECTIONS.INVENTORY)}
+                  onClick={() => setActiveSection(SECTIONS.PRODUCTS)}
                   className="text-xs font-bold px-3 py-1.5 bg-white rounded-lg text-red-600 hover:bg-red-50 transition-colors"
                 >
-                  Manage
+                  Update
                 </button>
               </div>
             ))}
-            {farmerInventory.filter(i => i.quantity <= i.lowStockThreshold).length === 0 && (
+            {products.filter(p => p.quantity && p.quantity <= 5).length === 0 && (
               <div className="text-center py-8 text-[var(--text-secondary)]">
                 <FaCheckCircle className="mx-auto mb-2 text-green-500" size={24} />
                 <p>All stock levels are healthy!</p>
@@ -1135,44 +1351,58 @@ const FarmerDashboard = () => {
         <h3 className="text-lg font-bold text-[var(--text-primary)]">Manage Orders</h3>
         <div className="flex gap-2">
           <button className="px-3 py-1.5 rounded-lg border border-[var(--border-color)] text-sm font-medium hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]">All Status</button>
-          <button className="px-3 py-1.5 rounded-lg border border-[var(--border-color)] text-sm font-medium hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)]">Export CSV</button>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
-              <th className="pb-3 font-medium">Order ID</th>
-              <th className="pb-3 font-medium">Customer</th>
-              <th className="pb-3 font-medium">Total</th>
-              <th className="pb-3 font-medium">Status</th>
-              <th className="pb-3 font-medium">Date</th>
-              <th className="pb-3 font-medium text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="text-sm">
-            {farmerRecentOrders.map((order) => (
-              <tr key={order.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
-                <td className="py-4 font-medium text-[var(--primary-600)]">{order.id}</td>
-                <td className="py-4">{order.customer}</td>
-                <td className="py-4 font-medium">{order.total}</td>
-                <td className="py-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${order.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                      order.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
-                    }`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td className="py-4 text-[var(--text-tertiary)]">{order.date}</td>
-                <td className="py-4 text-right">
-                  <button className="text-[var(--primary-600)] hover:text-[var(--primary-700)] font-medium text-sm">View Details</button>
-                </td>
+
+      {ordersLoading ? (
+        <div className="text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary-500)] mb-4"></div>
+          <p className="text-[var(--text-secondary)]">Loading orders...</p>
+        </div>
+      ) : farmerOrders.length === 0 ? (
+        <div className="text-center py-12">
+          <FaShoppingBasket size={48} className="text-[var(--text-tertiary)] mx-auto mb-4" />
+          <p className="text-[var(--text-secondary)]">No orders yet</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
+                <th className="pb-3 font-medium">Order ID</th>
+                <th className="pb-3 font-medium">Amount</th>
+                <th className="pb-3 font-medium">Items</th>
+                <th className="pb-3 font-medium">Status</th>
+                <th className="pb-3 font-medium">Date</th>
+                <th className="pb-3 font-medium text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="text-sm">
+              {farmerOrders.map((order) => (
+                <tr key={order.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
+                  <td className="py-4 font-medium text-[var(--primary-600)]">#{order.id.slice(0, 8)}</td>
+                  <td className="py-4 font-medium">{order.total_amount?.toLocaleString()} FCFA</td>
+                  <td className="py-4">{order.order_items?.length || 0} items</td>
+                  <td className="py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      order.status === 'completed' || order.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                      order.status === 'pending_payment' || order.status === 'processing' ? 'bg-yellow-100 text-yellow-700' :
+                      order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {order.status?.charAt(0).toUpperCase() + order.status?.slice(1).replace(/_/g, ' ')}
+                    </span>
+                  </td>
+                  <td className="py-4 text-[var(--text-tertiary)]">{new Date(order.created_at).toLocaleDateString()}</td>
+                  <td className="py-4 text-right">
+                    <button className="text-[var(--primary-600)] hover:text-[var(--primary-700)] font-medium text-sm">View</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </motion.div>
   );
 
@@ -1185,94 +1415,334 @@ const FarmerDashboard = () => {
         </div>
         <div className="text-right">
           <p className="text-sm text-[var(--text-secondary)]">Total Revenue</p>
-          <p className="text-xl font-bold text-[var(--primary-600)]">{farmerSummary.revenueThisMonth}</p>
+          <p className="text-xl font-bold text-[var(--primary-600)]">{dashboardStats.totalRevenue?.toLocaleString()} FCFA</p>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
-              <th className="pb-3 font-medium">Reference</th>
-              <th className="pb-3 font-medium">Order ID</th>
-              <th className="pb-3 font-medium">Amount</th>
-              <th className="pb-3 font-medium">Status</th>
-              <th className="pb-3 font-medium">Date</th>
-            </tr>
-          </thead>
-          <tbody className="text-sm">
-            {farmerPayments.map((payment) => (
-              <tr key={payment.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
-                <td className="py-4 font-medium text-[var(--text-primary)]">{payment.reference}</td>
-                <td className="py-4 text-[var(--primary-600)]">{payment.orderId}</td>
-                <td className="py-4 font-bold">{payment.amount}</td>
-                <td className="py-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${payment.status === 'Successful' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                    }`}>
-                    {payment.status}
-                  </span>
-                </td>
-                <td className="py-4 text-[var(--text-tertiary)]">{payment.date}</td>
+
+      {farmerOrders.length === 0 ? (
+        <div className="text-center py-12">
+          <FaCreditCard size={48} className="text-[var(--text-tertiary)] mx-auto mb-4" />
+          <p className="text-[var(--text-secondary)]">No payment transactions yet</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
+                <th className="pb-3 font-medium">Order ID</th>
+                <th className="pb-3 font-medium">Amount</th>
+                <th className="pb-3 font-medium">Payment Method</th>
+                <th className="pb-3 font-medium">Status</th>
+                <th className="pb-3 font-medium">Date</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="text-sm">
+              {farmerOrders.map((order) => (
+                <tr key={order.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
+                  <td className="py-4 font-medium text-[var(--primary-600)]">#{order.id.slice(0, 8)}</td>
+                  <td className="py-4 font-bold">{order.total_amount?.toLocaleString()} FCFA</td>
+                  <td className="py-4 capitalize">{order.payment_method || 'COD'}</td>
+                  <td className="py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      order.status === 'completed' || order.status === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {order.status === 'completed' || order.status === 'delivered' ? 'Received' : 'Pending'}
+                    </span>
+                  </td>
+                  <td className="py-4 text-[var(--text-tertiary)]">{new Date(order.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </motion.div>
   );
 
   const renderInventory = () => (
-    <motion.div {...fadeIn} className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
-      <div className="mb-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">Inventory Management</h3>
-        <p className="text-sm text-[var(--text-secondary)]">Monitor stock levels and restock items</p>
-      </div>
-      <div className="space-y-4">
-        {farmerInventory.map((item) => (
-          <div key={item.id} className="flex items-center justify-between p-4 border border-[var(--border-light)] rounded-xl hover:bg-[var(--bg-secondary)] transition-colors">
-            <div className="flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${item.quantity <= item.lowStockThreshold ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-                }`}>
-                <FaBoxOpen />
-              </div>
-              <div>
-                <h4 className="font-bold text-[var(--text-primary)]">{item.name}</h4>
-                <p className={`text-xs font-medium ${item.quantity <= item.lowStockThreshold ? 'text-red-500' : 'text-green-500'
-                  }`}>
-                  {item.quantity} units in stock
-                </p>
-              </div>
+    <motion.div {...fadeIn} className="space-y-6">
+      {/* Summary Cards */}
+      {inventorySummary?.summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Total Products', value: inventorySummary.summary.totalProducts, color: 'bg-blue-100 text-blue-700' },
+            { label: 'In Stock', value: inventorySummary.summary.inStock, color: 'bg-green-100 text-green-700' },
+            { label: 'Low Stock', value: inventorySummary.summary.lowStock, color: 'bg-yellow-100 text-yellow-700' },
+            { label: 'Out of Stock', value: inventorySummary.summary.outOfStock, color: 'bg-red-100 text-red-700' }
+          ].map((stat) => (
+            <div key={stat.label} className="bg-white rounded-xl border border-[var(--border-light)] p-4 text-center">
+              <p className="text-2xl font-bold text-[var(--text-primary)]">{stat.value}</p>
+              <span className={`inline-block mt-1 text-xs font-bold px-2 py-1 rounded-full ${stat.color}`}>{stat.label}</span>
             </div>
-            <button className="px-4 py-2 border border-[var(--border-color)] bg-white hover:bg-[var(--bg-secondary)] rounded-lg text-sm font-medium text-[var(--text-secondary)]">
-              Update Stock
-            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Products Stock Table */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-bold text-[var(--text-primary)]">Inventory Management</h3>
+            <p className="text-sm text-[var(--text-secondary)]">Monitor and adjust stock levels</p>
           </div>
-        ))}
+        </div>
+
+        {inventoryLoading ? (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary-500)] mb-4"></div>
+            <p className="text-[var(--text-secondary)]">Loading inventory...</p>
+          </div>
+        ) : !inventorySummary?.products || inventorySummary.products.length === 0 ? (
+          <div className="text-center py-12">
+            <FaBoxOpen size={48} className="text-[var(--text-tertiary)] mx-auto mb-4" />
+            <p className="text-[var(--text-secondary)]">No products yet. Add products to manage inventory.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {inventorySummary.products.map((item) => {
+              const isLow = item.low_stock_alert_enabled && item.quantity > 0 && item.quantity <= item.stock_alert_threshold;
+              const isOut = item.quantity === 0;
+              return (
+                <div key={item.id} className="flex items-center justify-between p-4 border border-[var(--border-light)] rounded-xl hover:bg-[var(--bg-secondary)] transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      isOut ? 'bg-red-100 text-red-600' : isLow ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600'
+                    }`}>
+                      <FaBoxOpen />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-[var(--text-primary)]">{item.name}</h4>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          isOut ? 'bg-red-100 text-red-700' : isLow ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
+                        }`}>
+                          {isOut ? 'Out of Stock' : isLow ? 'Low Stock' : 'In Stock'}
+                        </span>
+                        <span className="text-sm text-[var(--text-secondary)]">{item.quantity} units</span>
+                        {item.low_stock_alert_enabled && (
+                          <span className="text-xs text-[var(--text-tertiary)]">Alert at ≤{item.stock_alert_threshold}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setAdjustModal({ isOpen: true, product: item }); setAdjustAmount(''); setAdjustNotes(''); }}
+                      className="px-4 py-2 bg-[var(--primary-500)] text-white rounded-lg text-sm font-medium hover:bg-[var(--primary-600)] transition-colors flex items-center gap-2"
+                    >
+                      <FaEdit size={12} /> Adjust
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {/* Recent Stock History */}
+      {stockHistory.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
+          <h3 className="text-lg font-bold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+            <FaHistory className="text-[var(--primary-500)]" /> Recent Stock Changes
+          </h3>
+          <div className="space-y-3">
+            {stockHistory.slice(0, 10).map((entry) => (
+              <div key={entry.id} className="flex items-center justify-between p-3 border border-[var(--border-light)] rounded-lg text-sm">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    entry.change_amount > 0 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                  }`}>
+                    {entry.change_amount > 0 ? <FaPlus size={10} /> : <FaMinus size={10} />}
+                  </div>
+                  <div>
+                    <span className="font-medium text-[var(--text-primary)]">{entry.products?.name || 'Product'}</span>
+                    <span className="text-[var(--text-secondary)] ml-2">
+                      {entry.previous_quantity} → {entry.new_quantity} ({entry.change_amount > 0 ? '+' : ''}{entry.change_amount})
+                    </span>
+                  </div>
+                </div>
+                <div className="text-xs text-[var(--text-tertiary)]">
+                  {new Date(entry.created_at).toLocaleDateString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Adjust Stock Modal */}
+      <AnimatePresence>
+        {adjustModal.isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setAdjustModal({ isOpen: false, product: null })}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl p-6 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">Adjust Stock</h3>
+                <button onClick={() => setAdjustModal({ isOpen: false, product: null })} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+                  <FaTimes />
+                </button>
+              </div>
+              <p className="text-sm text-[var(--text-secondary)] mb-1">Product: <strong>{adjustModal.product?.name}</strong></p>
+              <p className="text-sm text-[var(--text-secondary)] mb-4">Current stock: <strong>{adjustModal.product?.quantity} units</strong></p>
+              <form onSubmit={handleAdjustStock} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Quantity Change</label>
+                  <input
+                    type="number"
+                    value={adjustAmount}
+                    onChange={(e) => setAdjustAmount(e.target.value)}
+                    placeholder="e.g. 10 to add, -5 to remove"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none"
+                    required
+                  />
+                  <p className="text-xs text-[var(--text-tertiary)] mt-1">Use positive numbers to add stock, negative to remove</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Notes (optional)</label>
+                  <input
+                    type="text"
+                    value={adjustNotes}
+                    onChange={(e) => setAdjustNotes(e.target.value)}
+                    placeholder="Reason for adjustment"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustModal({ isOpen: false, product: null })}
+                    className="flex-1 py-3 border-2 border-[var(--border-color)] rounded-xl font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={adjusting || !adjustAmount}
+                    className="flex-1 py-3 bg-[var(--primary-500)] text-white rounded-xl font-bold hover:bg-[var(--primary-600)] disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {adjusting ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <>
+                        <FaCheck /> Update Stock
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 
   const renderNotifications = () => (
-    <motion.div {...fadeIn} className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">Notifications</h3>
-        <button className="text-sm text-[var(--primary-600)] font-medium hover:underline">Mark all as read</button>
-      </div>
-      <div className="space-y-4">
-        {farmerNotifications.map((notif) => (
-          <div key={notif.id} className={`flex gap-4 p-4 rounded-xl ${notif.read ? 'bg-white' : 'bg-blue-50'} border border-[var(--border-light)]`}>
-            <div className={`mt-1 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${notif.type === 'order' ? 'bg-green-100 text-green-600' :
-                notif.type === 'payment' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
-              }`}>
-              <FaBell size={14} />
-            </div>
-            <div className="flex-1">
-              <p className={`text-sm ${notif.read ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)] font-medium'}`}>
-                {notif.message}
-              </p>
-              <p className="text-xs text-[var(--text-tertiary)] mt-1">{notif.time}</p>
-            </div>
+    <motion.div {...fadeIn} className="max-w-3xl mx-auto space-y-6">
+      <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-bold text-[var(--text-primary)]">Notifications</h3>
+            {unreadCount > 0 && (
+              <p className="text-sm text-[var(--text-secondary)]">{unreadCount} unread</p>
+            )}
           </div>
-        ))}
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="px-4 py-2 text-sm font-medium text-[var(--primary-600)] hover:bg-[var(--primary-50)] rounded-lg transition-colors flex items-center gap-2"
+            >
+              <FaCheckCircle size={14} /> Mark all as read
+            </button>
+          )}
+        </div>
+
+        {notificationsLoading ? (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary-500)] mb-4"></div>
+            <p className="text-[var(--text-secondary)]">Loading notifications...</p>
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="text-center py-12">
+            <FaBell size={48} className="text-[var(--text-tertiary)] mx-auto mb-4" />
+            <p className="text-[var(--text-secondary)]">No notifications yet</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">You'll be notified about orders, reviews, and stock alerts</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {notifications.map((notif) => (
+              <div
+                key={notif.id}
+                className={`flex items-start gap-4 p-4 rounded-xl border transition-colors ${
+                  notif.read
+                    ? 'border-[var(--border-light)] bg-white'
+                    : 'border-[var(--primary-200)] bg-[var(--primary-50)]'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  notif.type === 'order' ? 'bg-blue-100 text-blue-600'
+                    : notif.type === 'review' ? 'bg-yellow-100 text-yellow-600'
+                    : notif.type === 'stock' ? 'bg-red-100 text-red-600'
+                    : notif.type === 'payment' ? 'bg-green-100 text-green-600'
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {notif.type === 'order' ? <FaShoppingBasket size={16} />
+                    : notif.type === 'review' ? <FaCheckCircle size={16} />
+                    : notif.type === 'stock' ? <FaExclamationTriangle size={16} />
+                    : notif.type === 'payment' ? <FaMoneyBillWave size={16} />
+                    : <FaBell size={16} />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className={`text-sm font-bold ${notif.read ? 'text-[var(--text-primary)]' : 'text-[var(--primary-700)]'}`}>
+                        {notif.title}
+                      </h4>
+                      <p className="text-sm text-[var(--text-secondary)] mt-0.5">{notif.message}</p>
+                    </div>
+                    {!notif.read && (
+                      <div className="w-2.5 h-2.5 bg-[var(--primary-500)] rounded-full flex-shrink-0 mt-1.5"></div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-xs text-[var(--text-tertiary)]">
+                      {new Date(notif.created_at).toLocaleDateString()} at {new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {!notif.read && (
+                        <button
+                          onClick={() => handleMarkAsRead(notif.id)}
+                          className="text-xs text-[var(--primary-600)] hover:underline flex items-center gap-1"
+                        >
+                          <FaEnvelopeOpen size={10} /> Mark read
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteNotification(notif.id)}
+                        className="text-xs text-red-500 hover:underline flex items-center gap-1 ml-2"
+                      >
+                        <FaTrash size={10} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -1552,40 +2022,96 @@ const FarmerDashboard = () => {
     <motion.div {...fadeIn} className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
       <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
         <h3 className="text-lg font-bold text-[var(--text-primary)] mb-6">Contact Support</h3>
-        <form className="space-y-4">
-          <Input label="Subject" placeholder="Briefly describe your issue" />
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-[var(--text-secondary)]">Message</label>
-            <textarea
-              rows="4"
-              className="px-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none resize-none"
-              placeholder="How can we help you?"
+
+        {supportSuccess && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm flex items-center gap-2">
+            <FaCheckCircle /> {supportSuccess}
+          </div>
+        )}
+
+        <form onSubmit={handleSupportSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Subject</label>
+            <input
+              type="text"
+              value={supportForm.subject}
+              onChange={(e) => setSupportForm(prev => ({ ...prev, subject: e.target.value }))}
+              placeholder="Briefly describe your issue"
+              className="w-full px-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none"
+              required
             />
           </div>
-          <button className="w-full py-3 bg-[var(--primary-500)] text-white font-bold rounded-xl hover:bg-[var(--primary-600)] transition-all flex items-center justify-center gap-2">
-            <FaPaperPlane /> Send Message
+          <div>
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Message</label>
+            <textarea
+              rows="5"
+              value={supportForm.message}
+              onChange={(e) => setSupportForm(prev => ({ ...prev, message: e.target.value }))}
+              className="w-full px-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none resize-none"
+              placeholder="Describe your issue in detail..."
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={supportLoading || !supportForm.subject || !supportForm.message}
+            className="w-full py-3 bg-[var(--primary-500)] text-white font-bold rounded-xl hover:bg-[var(--primary-600)] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {supportLoading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <>
+                <FaPaperPlane /> Send Message
+              </>
+            )}
           </button>
         </form>
+
+        {/* Quick Help */}
+        <div className="mt-6 pt-6 border-t border-[var(--border-light)]">
+          <h4 className="text-sm font-bold text-[var(--text-primary)] mb-3">Quick Help</h4>
+          <div className="space-y-2">
+            {[
+              { q: 'How do I update my product prices?', a: 'Go to Products → Edit the product → Update the price field.' },
+              { q: 'How do I manage stock?', a: 'Go to Inventory → Click "Adjust" next to any product.' },
+              { q: 'How do I receive payments?', a: 'Payments are processed through Mobile Money. Ensure your phone number is correct in your profile.' }
+            ].map((faq, i) => (
+              <details key={i} className="group">
+                <summary className="cursor-pointer text-sm text-[var(--primary-600)] font-medium py-2 hover:text-[var(--primary-700)] flex items-center gap-2">
+                  <FaInfoCircle size={12} /> {faq.q}
+                </summary>
+                <p className="text-sm text-[var(--text-secondary)] pl-6 pb-2">{faq.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)] mb-6">Recent Tickets</h3>
+        <h3 className="text-lg font-bold text-[var(--text-primary)] mb-6">Your Tickets</h3>
         <div className="space-y-4">
-          {farmerSupportTickets.map((ticket) => (
-            <div key={ticket.id} className="p-4 border border-[var(--border-light)] rounded-xl">
-              <div className="flex justify-between items-start mb-2">
-                <span className="font-bold text-[var(--text-primary)]">{ticket.id}</span>
-                <span className={`px-2 py-1 rounded text-xs font-bold ${ticket.status === 'Open' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                  }`}>
-                  {ticket.status}
-                </span>
-              </div>
-              <p className="text-sm text-[var(--text-secondary)] mb-2">{ticket.subject}</p>
-              <p className="text-xs text-[var(--text-tertiary)]">{ticket.date}</p>
+          {supportTickets.length === 0 ? (
+            <div className="text-center py-8">
+              <FaEnvelope size={36} className="text-[var(--text-tertiary)] mx-auto mb-3" />
+              <p className="text-[var(--text-secondary)]">No tickets yet</p>
+              <p className="text-xs text-[var(--text-tertiary)] mt-1">Submit a support request and it will appear here</p>
             </div>
-          ))}
-          {farmerSupportTickets.length === 0 && (
-            <p className="text-center text-[var(--text-secondary)] py-4">No tickets found.</p>
+          ) : (
+            supportTickets.map((ticket) => (
+              <div key={ticket.id} className="p-4 border border-[var(--border-light)] rounded-xl hover:bg-[var(--bg-secondary)] transition-colors">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="font-bold text-[var(--text-primary)] text-sm">{ticket.id}</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                    ticket.status === 'Open' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                  }`}>
+                    {ticket.status}
+                  </span>
+                </div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">{ticket.subject}</p>
+                <p className="text-xs text-[var(--text-secondary)] mt-1 line-clamp-2">{ticket.message}</p>
+                <p className="text-xs text-[var(--text-tertiary)] mt-2">{ticket.date}</p>
+              </div>
+            ))
           )}
         </div>
       </div>

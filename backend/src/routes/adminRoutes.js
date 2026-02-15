@@ -14,7 +14,9 @@ const {
   viewUserDetails,
   suspendUser,
   unsuspendUser,
-  promoteUserToAdmin
+  promoteUserToAdmin,
+  getTransactions,
+  getTopFarmers
 } = require('../controllers/adminController');
 
 const router = express.Router();
@@ -105,6 +107,18 @@ router.patch('/users/:id/unsuspend', unsuspendUser);
  * Promote a user to admin
  */
 router.patch('/users/:id/promote', promoteUserToAdmin);
+
+/**
+ * GET /api/admin/transactions
+ * Get all platform transactions
+ */
+router.get('/transactions', getTransactions);
+
+/**
+ * GET /api/admin/analytics/top-farmers
+ * Get top farmers by revenue
+ */
+router.get('/analytics/top-farmers', getTopFarmers);
 
 module.exports = router;
 

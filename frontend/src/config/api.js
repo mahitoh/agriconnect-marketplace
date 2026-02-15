@@ -22,6 +22,10 @@ export const API_ENDPOINTS = {
   ADMIN_PENDING_FARMERS: `${API_BASE_URL}/api/admin/farmers/pending`,
   ADMIN_APPROVE_FARMER: `${API_BASE_URL}/api/admin/farmers`,
   ADMIN_REJECT_FARMER: `${API_BASE_URL}/api/admin/farmers`,
+  ADMIN_TRANSACTIONS: `${API_BASE_URL}/api/admin/transactions`,
+  ADMIN_ACTIVITY: `${API_BASE_URL}/api/admin/analytics/activity`,
+  ADMIN_TOP_FARMERS: `${API_BASE_URL}/api/admin/analytics/top-farmers`,
+  ADMIN_DASHBOARD: `${API_BASE_URL}/api/admin/analytics/dashboard`,
 
   // Product endpoints
   PRODUCTS: `${API_BASE_URL}/api/products`,
@@ -61,6 +65,22 @@ export const API_ENDPOINTS = {
   FAVORITES: `${API_BASE_URL}/api/favorites`,
   FAVORITES_CHECK: (productId) => `${API_BASE_URL}/api/favorites/check/${productId}`,
   FAVORITES_REMOVE: (productId) => `${API_BASE_URL}/api/favorites/${productId}`,
+
+  // Inventory endpoints
+  INVENTORY_SUMMARY: `${API_BASE_URL}/api/inventory/summary`,
+  INVENTORY_LOW_STOCK: `${API_BASE_URL}/api/inventory/low-stock`,
+  INVENTORY_HISTORY: `${API_BASE_URL}/api/inventory/history`,
+  INVENTORY_ADJUST: (productId) => `${API_BASE_URL}/api/inventory/products/${productId}/adjust`,
+  INVENTORY_PRODUCT_HISTORY: (productId) => `${API_BASE_URL}/api/inventory/products/${productId}/history`,
+  INVENTORY_ALERT_SETTINGS: (productId) => `${API_BASE_URL}/api/inventory/products/${productId}/alert-settings`,
+
+  // Notification endpoints
+  NOTIFICATIONS: `${API_BASE_URL}/api/notifications`,
+  NOTIFICATIONS_UNREAD_COUNT: `${API_BASE_URL}/api/notifications/unread-count`,
+  NOTIFICATION_MARK_READ: (id) => `${API_BASE_URL}/api/notifications/${id}/read`,
+  NOTIFICATIONS_MARK_ALL_READ: `${API_BASE_URL}/api/notifications/mark-all-read`,
+  NOTIFICATION_DELETE: (id) => `${API_BASE_URL}/api/notifications/${id}`,
+  NOTIFICATION_PREFERENCES: `${API_BASE_URL}/api/notifications/preferences`,
 };
 
 export default API_BASE_URL;

@@ -198,6 +198,15 @@ const login = async (req, res) => {
       });
     }
 
+    // Check if user is suspended
+    if (profileData?.suspended) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been suspended. Please contact support for assistance.',
+        code: 'ACCOUNT_SUSPENDED'
+      });
+    }
+
     // Generate JWT token
     const token = generateToken(data.user);
 

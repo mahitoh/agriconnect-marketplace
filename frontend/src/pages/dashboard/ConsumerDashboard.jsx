@@ -24,7 +24,6 @@ import Input from '../../components/ui/input';
 import { useAuth } from '../../context/AuthContext';
 import { useFavorites } from '../../context/FavoritesContext';
 import { API_ENDPOINTS } from '../../config/api';
-import { consumerSummary, consumerRecentOrders, consumerSuggestions } from '../../data/dashboardMock';
 import { authFetch } from '../../utils/authFetch';
 
 const SECTIONS = {
@@ -61,8 +60,9 @@ const ConsumerDashboard = () => {
     }
   }, [activeSection]);
 
-  // Fetch reviewable products
+  // Fetch orders and reviewable products on mount
   useEffect(() => {
+    fetchOrders();
     fetchReviewableProducts();
   }, []);
 
@@ -222,19 +222,19 @@ const ConsumerDashboard = () => {
         <StatCard
           icon={<FaCreditCard size={20} />}
           label="Total Spent"
-          value={consumerSummary.totalSpent}
+          value={`${(orders.reduce((sum, order) => sum + (order.total_amount || 0), 0)).toLocaleString()} FCFA`}
           color="from-[var(--primary-500)] to-[var(--primary-700)]"
         />
         <StatCard
           icon={<FaShoppingBag size={20} />}
           label="Orders Placed"
-          value={consumerSummary.ordersCount}
+          value={orders.length}
           color="from-[var(--secondary-500)] to-[var(--secondary-700)]"
         />
         <StatCard
           icon={<FaHeart size={20} />}
           label="Saved Items"
-          value="12"
+          value={likedProducts.length}
           color="from-[var(--accent-500)] to-[var(--accent-700)]"
         />
       </div>
@@ -251,31 +251,53 @@ const ConsumerDashboard = () => {
           </button>
         </div>
         <div className="space-y-4">
-          {consumerRecentOrders.map((order) => (
-            <div key={order.id} className="flex flex-col md:flex-row items-center gap-4 p-4 rounded-xl border border-[var(--border-light)] hover:bg-[var(--bg-secondary)] transition-all group cursor-pointer">
-              <div className="w-12 h-12 rounded-lg bg-[var(--primary-100)] flex items-center justify-center text-[var(--primary-600)] font-bold text-lg">
-                📦
-              </div>
-              <div className="flex-1 text-center md:text-left">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-1 mb-1">
-                  <h4 className="font-bold text-[var(--text-primary)]">Order #{order.id}</h4>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${order.status === 'Delivered' ? 'bg-green-100 text-green-700' :
-                      order.status === 'On the way' ? 'bg-blue-100 text-blue-700' :
-                        'bg-yellow-100 text-yellow-700'
-                    }`}>
-                    {order.status}
-                  </span>
-                </div>
-                <p className="text-sm text-[var(--text-secondary)]">From {order.farmer} • {order.date}</p>
-              </div>
-              <div className="text-right flex flex-col items-center md:items-end">
-                <span className="font-bold text-[var(--primary-600)]">{order.total}</span>
-                <button className="text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--primary-600)] transition-colors flex items-center gap-1 mt-1">
-                  Details <FaChevronRight size={10} />
-                </button>
-              </div>
+          {ordersLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--primary-500)] border-t-transparent"></div>
             </div>
-          ))}
+          ) : orders.length === 0 ? (
+            <p className="text-center py-8 text-[var(--text-secondary)]">No orders yet. Start shopping from the marketplace!</p>
+          ) : (
+            orders.slice(0, 3).map((order) => {
+              const itemCount = order.order_items?.length || 0;
+              const status = order.status === 'PENDING_PAYMENT' ? 'Pending' : 
+                            order.status === 'CONFIRMED' ? 'Confirmed' :
+                            order.status === 'COMPLETED' ? 'Delivered' : order.status;
+              return (
+                <div 
+                  key={order.id} 
+                  onClick={() => {
+                    setSelectedOrder(order);
+                    setOrderDetailsModal(true);
+                  }}
+                  className="flex flex-col md:flex-row items-center gap-4 p-4 rounded-xl border border-[var(--border-light)] hover:bg-[var(--bg-secondary)] transition-all group cursor-pointer"
+                >
+                  <div className="w-12 h-12 rounded-lg bg-[var(--primary-100)] flex items-center justify-center text-[var(--primary-600)] font-bold text-lg">
+                    📦
+                  </div>
+                  <div className="flex-1 text-center md:text-left">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-1 mb-1">
+                      <h4 className="font-bold text-[var(--text-primary)]">Order #{order.id.slice(0, 8).toUpperCase()}</h4>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        status === 'Delivered' ? 'bg-green-100 text-green-700' :
+                        status === 'Confirmed' ? 'bg-blue-100 text-blue-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-[var(--text-secondary)]">{itemCount} item{itemCount !== 1 ? 's' : ''} • {new Date(order.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right flex flex-col items-center md:items-end">
+                    <span className="font-bold text-[var(--primary-600)]">{(order.total_amount || 0).toLocaleString()} FCFA</span>
+                    <button className="text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--primary-600)] transition-colors flex items-center gap-1 mt-1">
+                      Details <FaChevronRight size={10} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </motion.div>

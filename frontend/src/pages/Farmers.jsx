@@ -4,7 +4,6 @@ import { FaSearch, FaMapMarkerAlt, FaStar, FaFilter, FaTimes } from 'react-icons
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import FarmerCard from '../components/FarmerCard';
-import { farmers as mockFarmers } from '../data/mockData';
 import { API_ENDPOINTS } from '../config/api';
 
 const Farmers = () => {
@@ -25,24 +24,15 @@ const Farmers = () => {
     setLoading(true);
     setError(null);
     try {
-      console.log('🔍 Fetching farmers from:', API_ENDPOINTS.MARKETPLACE_FARMERS);
       const response = await fetch(API_ENDPOINTS.MARKETPLACE_FARMERS);
       
-      console.log('📡 Response status:', response.status);
-      
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Response error:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Failed to fetch farmers: ${response.status}`);
       }
       
       const data = await response.json();
-      console.log('📦 Response data:', data);
-      console.log('👨‍🌾 Farmers count:', data.farmers?.length || 0);
 
-      // Check if we have farmers in the response
       if (data.farmers && Array.isArray(data.farmers) && data.farmers.length > 0) {
-        console.log('✅ Processing', data.farmers.length, 'farmers');
         // Transform API farmers to match FarmerCard format
         const transformedFarmers = data.farmers.map(farmer => {
           const rating = farmer.rating?.average_rating || 0;
@@ -63,7 +53,7 @@ const Farmers = () => {
             name: farmer.full_name || 'Farmer',
             farm: farmer.farm_name || farmer.farm_details || 'Farm',
             location: farmer.location || 'Location not specified',
-            bio: farmer.bio || 'Dedicated to bringing you the freshest farm products.',
+            bio: farmer.bio || 'Growing fresh, quality products.',
             rating: rating.toFixed(1),
             reviews: reviews.toString(),
             badges: badges,
@@ -74,26 +64,14 @@ const Farmers = () => {
           };
         });
         setFarmers(transformedFarmers);
-      } else if (data.farmers && Array.isArray(data.farmers) && data.farmers.length === 0) {
-        // No farmers found in database
-        console.log('⚠️ No farmers found in database');
-        console.log('📊 Full response:', JSON.stringify(data, null, 2));
-        setError('No farmers found in database. Check: 1) Backend is running, 2) Farmers have role="farmer" in database, 3) Check backend console for errors. Showing sample farmers.');
-        setFarmers(mockFarmers);
       } else {
-        console.error('❌ Invalid response format:', data);
-        throw new Error(`Invalid response format. Expected 'farmers' array. Got: ${JSON.stringify(data).substring(0, 200)}`);
+        setFarmers([]);
+        setError('No farmers found in the marketplace.');
       }
     } catch (err) {
       console.error('❌ Error fetching farmers:', err);
-      console.error('❌ Error details:', {
-        message: err.message,
-        name: err.name,
-        stack: err.stack
-      });
-      setError(`Unable to load farmers: ${err.message}. Make sure backend is running on http://localhost:5000. Showing sample farmers.`);
-      // Fallback to mock data
-      setFarmers(mockFarmers);
+      setFarmers([]);
+      setError(`Unable to load farmers: ${err.message}`);
     } finally {
       setLoading(false);
     }

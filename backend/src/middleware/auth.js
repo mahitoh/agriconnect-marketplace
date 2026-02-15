@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { supabaseAdmin } = require('../config/supabase');
 
 /**
  * Middleware to verify JWT token and authenticate user
@@ -26,6 +27,21 @@ const authenticate = async (req, res, next) => {
       email: decoded.email,
       role: decoded.role || 'customer'
     };
+
+    // Check if user is suspended
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('suspended')
+      .eq('id', decoded.id)
+      .single();
+
+    if (profile?.suspended) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been suspended. Please contact support for assistance.',
+        code: 'ACCOUNT_SUSPENDED'
+      });
+    }
 
     next();
   } catch (error) {

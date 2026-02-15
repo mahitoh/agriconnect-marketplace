@@ -19,14 +19,15 @@ import {
   FaBan,
   FaDownload,
   FaTimes,
-  FaArrowLeft
+  FaArrowLeft,
+  FaStar,
+  FaBox
 } from 'react-icons/fa';
 import Navbar from '../../components/layout/Navbar';
 import Footer from '../../components/layout/Footer';
 import Input from '../../components/ui/input';
 import { useAuth } from '../../context/AuthContext';
 import { API_ENDPOINTS } from '../../config/api';
-import { adminSummary, adminRecentActivity, adminTopFarmers } from '../../data/dashboardMock';
 import { authFetch } from '../../utils/authFetch';
 
 const SECTIONS = {
@@ -59,6 +60,10 @@ const AdminDashboard = () => {
   const [suspendModal, setSuspendModal] = useState({ open: false, user: null });
   const [suspendLoading, setSuspendLoading] = useState(false);
 
+  // Unsuspend user modal state
+  const [unsuspendModal, setUnsuspendModal] = useState({ open: false, user: null });
+  const [unsuspendLoading, setUnsuspendLoading] = useState(false);
+
   // Add admin modal state
   const [addAdminModal, setAddAdminModal] = useState(false);
   const [selectedAdminUserId, setSelectedAdminUserId] = useState('');
@@ -78,6 +83,19 @@ const AdminDashboard = () => {
 
   // Farmer action handlers
   const [farmerAction, setFarmerAction] = useState(null); // { type: 'approve'|'reject', farmer: {} }
+
+  // Real dashboard data
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [topFarmers, setTopFarmers] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+
+  // Transactions data
+  const [transactions, setTransactions] = useState([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [transactionsError, setTransactionsError] = useState(null);
+
+  // Dashboard analytics
+  const [dashboardStats, setDashboardStats] = useState(null);
 
   // Fetch all users from backend
   React.useEffect(() => {
@@ -110,6 +128,103 @@ const AdminDashboard = () => {
     // Only fetch if user is admin
     if (user?.role === 'admin') {
       fetchAllUsers();
+    }
+  }, [user?.role]);
+
+  // Fetch real activity and top farmers from admin API
+  React.useEffect(() => {
+    const fetchActivityAndFarmers = async () => {
+      setActivityLoading(true);
+      try {
+        // Fetch recent activity from admin analytics endpoint
+        const [activityRes, farmersRes, dashboardRes] = await Promise.all([
+          authFetch(API_ENDPOINTS.ADMIN_ACTIVITY, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          }),
+          authFetch(API_ENDPOINTS.ADMIN_TOP_FARMERS, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          }),
+          authFetch(API_ENDPOINTS.ADMIN_DASHBOARD, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          })
+        ]);
+
+        // Process activity
+        if (activityRes.ok) {
+          const activityData = await activityRes.json();
+          const activities = (activityData.data?.activities || []).slice(0, 10).map(a => ({
+            id: a.id,
+            type: a.type === 'order' ? 'Order Placed' : a.type === 'product' ? 'Product Added' : 'Review Posted',
+            actor: a.description?.split(' ')[0] || 'User',
+            target: a.description || '',
+            time: new Date(a.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            rawType: a.type
+          }));
+          setRecentActivity(activities);
+        }
+
+        // Process top farmers
+        if (farmersRes.ok) {
+          const farmersData = await farmersRes.json();
+          const farmers = (farmersData.data?.farmers || []).map(f => ({
+            id: f.id,
+            name: f.name,
+            phone: f.phone || '',
+            revenue: `${Math.floor(f.revenue).toLocaleString()} FCFA`,
+            orderCount: f.orderCount,
+            productsSold: f.productsSold
+          }));
+          setTopFarmers(farmers);
+        }
+
+        // Process dashboard stats
+        if (dashboardRes.ok) {
+          const dashData = await dashboardRes.json();
+          setDashboardStats(dashData.data);
+        }
+      } catch (error) {
+        console.error('❌ Error fetching activity and farmers:', error);
+      } finally {
+        setActivityLoading(false);
+      }
+    };
+
+    if (user?.role === 'admin') {
+      fetchActivityAndFarmers();
+    }
+  }, [user?.role]);
+
+  // Fetch real transactions
+  React.useEffect(() => {
+    const fetchTransactions = async () => {
+      setTransactionsLoading(true);
+      setTransactionsError(null);
+      try {
+        const response = await authFetch(API_ENDPOINTS.ADMIN_TRANSACTIONS, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch transactions');
+        }
+
+        const data = await response.json();
+        console.log('💰 Transactions fetched:', data);
+        setTransactions(data.data?.transactions || []);
+      } catch (error) {
+        console.error('❌ Error fetching transactions:', error);
+        setTransactionsError(error.message);
+      } finally {
+        setTransactionsLoading(false);
+      }
+    };
+
+    if (user?.role === 'admin') {
+      fetchTransactions();
     }
   }, [user?.role]);
 
@@ -153,15 +268,24 @@ const AdminDashboard = () => {
     
     setSuspendLoading(true);
     try {
-      const response = await authFetch(`${API_ENDPOINTS.ADMIN_USERS}/${suspendModal.user.id}/suspend`, {
+      const endpoint = `${API_ENDPOINTS.ADMIN_USERS}/${suspendModal.user.id}/suspend`;
+      console.log('🔗 Suspending user at:', endpoint);
+      console.log('📋 User data:', suspendModal.user);
+      console.log('👤 User ID being sent:', suspendModal.user.id);
+      
+      const response = await authFetch(endpoint, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
         }
       });
 
+      console.log('📡 Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error('Failed to suspend user');
+        const errorData = await response.json().catch(() => ({message: 'Unknown error'}));
+        console.error('📊 Error response:', errorData);
+        throw new Error(errorData.message || `HTTP ${response.status}: Failed to suspend user`);
       }
 
       const data = await response.json();
@@ -183,6 +307,56 @@ const AdminDashboard = () => {
       alert(`Error: ${error.message}`);
     } finally {
       setSuspendLoading(false);
+    }
+  };
+
+  // Handle unsuspend user
+  const handleUnsuspendUser = (user) => {
+    setUnsuspendModal({ open: true, user });
+  };
+
+  // Submit unsuspend user
+  const submitUnsuspendUser = async () => {
+    if (!unsuspendModal.user) return;
+    
+    setUnsuspendLoading(true);
+    try {
+      const endpoint = `${API_ENDPOINTS.ADMIN_USERS}/${unsuspendModal.user.id}/unsuspend`;
+      console.log('🔗 Unsuspending user at:', endpoint);
+      
+      const response = await authFetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('📡 Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: 'Unknown error'}));
+        throw new Error(errorData.message || `HTTP ${response.status}: Failed to unsuspend user`);
+      }
+
+      const data = await response.json();
+      console.log('✅ User unsuspended:', data);
+      
+      // Update users list
+      setAllUsers(allUsers.map(u => 
+        u.id === unsuspendModal.user.id 
+          ? { ...u, suspended: false }
+          : u
+      ));
+
+      // Close modal
+      setUnsuspendModal({ open: false, user: null });
+      
+      alert(`${unsuspendModal.user.full_name} has been unsuspended`);
+    } catch (error) {
+      console.error('❌ Error unsuspending user:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setUnsuspendLoading(false);
     }
   };
 
@@ -353,12 +527,66 @@ const AdminDashboard = () => {
     }
   }, [user?.role]);
 
-  const transactionsList = [
-    { id: 'TRX-9901', user: 'Alice Nkam', type: 'Order Payment', amount: '15,000 FCFA', status: 'Completed', date: 'Today, 10:30 AM' },
-    { id: 'TRX-9902', user: 'Jean-Pierre', type: 'Payout', amount: '45,000 FCFA', status: 'Processing', date: 'Yesterday' },
-    { id: 'TRX-9903', user: 'Marie Nguema', type: 'Order Payment', amount: '8,200 FCFA', status: 'Completed', date: '2 days ago' },
-    { id: 'TRX-9904', user: 'System', type: 'Refund', amount: '2,500 FCFA', status: 'Completed', date: 'Last week' }
-  ];
+  // Export transactions to CSV
+  const exportTransactionsCSV = () => {
+    if (transactions.length === 0) {
+      alert('No transactions to export');
+      return;
+    }
+
+    const headers = ['Transaction ID', 'Customer', 'Phone', 'Type', 'Amount (FCFA)', 'Payment Status', 'Order Status', 'Date'];
+    const rows = transactions.map(trx => [
+      trx.orderId,
+      trx.customer,
+      trx.customerPhone,
+      trx.type,
+      trx.amount,
+      trx.status,
+      trx.orderStatus,
+      new Date(trx.date).toLocaleString()
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `agriconnect-transactions-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Format payment status for display
+  const formatStatus = (status) => {
+    const statusMap = {
+      'pending_payment': 'Pending',
+      'paid': 'Completed',
+      'successful': 'Completed',
+      'processing': 'Processing',
+      'completed': 'Completed',
+      'failed': 'Failed',
+      'cancelled': 'Cancelled',
+      'refunded': 'Refunded',
+      'initiated': 'Initiated',
+      'expired': 'Expired'
+    };
+    return statusMap[status] || status?.charAt(0).toUpperCase() + status?.slice(1) || 'Unknown';
+  };
+
+  const getStatusColor = (status) => {
+    const s = formatStatus(status);
+    if (s === 'Completed') return 'bg-green-100 text-green-700';
+    if (s === 'Processing') return 'bg-blue-100 text-blue-700';
+    if (s === 'Pending' || s === 'Initiated') return 'bg-yellow-100 text-yellow-700';
+    if (s === 'Failed' || s === 'Cancelled') return 'bg-red-100 text-red-700';
+    if (s === 'Refunded') return 'bg-purple-100 text-purple-700';
+    return 'bg-gray-100 text-gray-700';
+  };
 
   const normalizedUserSearch = userSearch.trim().toLowerCase();
   const filteredUsers = allUsers.filter((u) => {
@@ -421,30 +649,26 @@ const AdminDashboard = () => {
         <StatCard
           icon={<FaUsers size={20} />}
           label="Total Users"
-          value={allUsers.length}
-          trend={15.2}
+          value={dashboardStats?.overview?.totalUsers ?? allUsers.length}
           color="from-blue-500 to-blue-700"
         />
         <StatCard
           icon={<FaTractor size={20} />}
           label="Farmers"
-          value={allUsers.filter(u => u.role === 'farmer').length}
-          trend={8.5}
+          value={dashboardStats?.overview?.totalFarmers ?? allUsers.filter(u => u.role === 'farmer').length}
           color="from-[var(--primary-500)] to-[var(--primary-700)]"
         />
         <StatCard
-          icon={<FaCheckCircle size={20} />}
-          label="Customers"
-          value={allUsers.filter(u => u.role === 'customer').length}
-          trend={12.0}
+          icon={<FaShoppingCart size={20} />}
+          label="Total Orders"
+          value={dashboardStats?.overview?.totalOrders ?? 0}
           color="from-[var(--secondary-500)] to-[var(--secondary-700)]"
         />
         <StatCard
-          icon={<FaBan size={20} />}
-          label="Suspended"
-          value={allUsers.filter(u => u.suspended).length}
-          trend={-2.5}
-          color="from-red-500 to-red-700"
+          icon={<FaMoneyBillWave size={20} />}
+          label="Revenue"
+          value={`${(dashboardStats?.overview?.totalRevenue ?? 0).toLocaleString()} FCFA`}
+          color="from-green-500 to-green-700"
         />
       </div>
 
@@ -453,29 +677,39 @@ const AdminDashboard = () => {
         <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-[var(--text-primary)]">Recent Activity</h3>
-            <button className="text-sm text-[var(--primary-600)] font-medium hover:underline">View Log</button>
+            <span className="text-sm text-[var(--text-secondary)]">{recentActivity.length} events</span>
           </div>
           <div className="space-y-4">
-            {adminRecentActivity.map((item) => (
-              <div key={item.id} className="flex items-center gap-4 p-4 rounded-xl border border-[var(--border-light)] hover:bg-[var(--bg-secondary)] transition-all">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${item.type === 'New User' ? 'bg-blue-100 text-blue-600' :
-                    item.type === 'New Order' ? 'bg-green-100 text-green-600' :
-                      'bg-orange-100 text-orange-600'
-                  }`}>
-                  {item.type === 'New User' ? <FaUsers /> :
-                    item.type === 'New Order' ? <FaShoppingCart /> : <FaExclamationTriangle />}
-                </div>
-                <div className="flex-1">
-                  <div className="flex justify-between mb-1">
-                    <span className="font-bold text-[var(--text-primary)]">{item.type}</span>
-                    <span className="text-xs text-[var(--text-secondary)]">{item.time}</span>
-                  </div>
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    <span className="font-medium text-[var(--text-primary)]">{item.actor}</span> • {item.target}
-                  </p>
-                </div>
+            {activityLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--primary-500)] border-t-transparent"></div>
               </div>
-            ))}
+            ) : recentActivity.length === 0 ? (
+              <p className="text-center py-8 text-[var(--text-secondary)]">No recent activity</p>
+            ) : (
+              recentActivity.map((item) => (
+                <div key={item.id} className="flex items-center gap-4 p-4 rounded-xl border border-[var(--border-light)] hover:bg-[var(--bg-secondary)] transition-all">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    item.rawType === 'order' ? 'bg-green-100 text-green-600' :
+                    item.rawType === 'product' ? 'bg-blue-100 text-blue-600' :
+                    item.rawType === 'review' ? 'bg-yellow-100 text-yellow-600' :
+                    'bg-orange-100 text-orange-600'
+                  }`}>
+                    {item.rawType === 'order' ? <FaShoppingCart /> :
+                     item.rawType === 'product' ? <FaBox /> :
+                     item.rawType === 'review' ? <FaStar /> :
+                     <FaExclamationTriangle />}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between mb-1">
+                      <span className="font-bold text-[var(--text-primary)]">{item.type}</span>
+                      <span className="text-xs text-[var(--text-secondary)]">{item.time}</span>
+                    </div>
+                    <p className="text-sm text-[var(--text-secondary)] truncate">{item.target}</p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -485,18 +719,31 @@ const AdminDashboard = () => {
             <h3 className="text-lg font-bold text-[var(--text-primary)]">Top Farmers</h3>
           </div>
           <div className="space-y-4">
-            {adminTopFarmers.map((farmer, index) => (
-              <div key={farmer.id} className="flex items-center gap-3 pb-4 border-b border-[var(--border-light)] last:border-0 last:pb-0">
-                <div className="w-8 h-8 rounded-full bg-[var(--primary-100)] flex items-center justify-center text-[var(--primary-600)] font-bold text-xs">
-                  {index + 1}
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-[var(--text-primary)] text-sm">{farmer.name}</h4>
-                  <p className="text-xs text-[var(--text-secondary)]">{farmer.region}</p>
-                </div>
-                <span className="font-bold text-[var(--primary-600)] text-sm">{farmer.revenue}</span>
+            {activityLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--primary-500)] border-t-transparent"></div>
               </div>
-            ))}
+            ) : topFarmers.length === 0 ? (
+              <p className="text-center py-8 text-[var(--text-secondary)]">No farmer sales data yet</p>
+            ) : (
+              topFarmers.map((farmer, index) => (
+                <div key={farmer.id} className="flex items-center gap-3 pb-4 border-b border-[var(--border-light)] last:border-0 last:pb-0">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                    index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                    index === 1 ? 'bg-gray-100 text-gray-600' :
+                    index === 2 ? 'bg-orange-100 text-orange-700' :
+                    'bg-[var(--primary-100)] text-[var(--primary-600)]'
+                  }`}>
+                    {index + 1}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-[var(--text-primary)] text-sm">{farmer.name}</h4>
+                    <p className="text-xs text-[var(--text-secondary)]">{farmer.orderCount} orders • {farmer.productsSold} items sold</p>
+                  </div>
+                  <span className="font-bold text-[var(--primary-600)] text-sm">{farmer.revenue}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -628,21 +875,29 @@ const AdminDashboard = () => {
                       >
                         <FaUserShield />
                       </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSuspendUser(userItem);
-                        }}
-                        disabled={userItem.suspended}
-                        className={`p-2 rounded-lg transition-colors ${
-                          userItem.suspended 
-                            ? 'text-gray-400 cursor-not-allowed' 
-                            : 'text-[var(--text-secondary)] hover:text-red-600 hover:bg-red-50'
-                        }`}
-                        title={userItem.suspended ? 'User already suspended' : 'Suspend user'}
-                      >
-                        <FaBan />
-                      </button>
+                      {!userItem.suspended ? (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSuspendUser(userItem);
+                          }}
+                          className="p-2 text-[var(--text-secondary)] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Suspend user"
+                        >
+                          <FaBan />
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUnsuspendUser(userItem);
+                          }}
+                          className="p-2 text-red-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                          title="Unsuspend user"
+                        >
+                          <FaCheckCircle />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -724,43 +979,97 @@ const AdminDashboard = () => {
   const renderTransactions = () => (
     <motion.div {...fadeIn} className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-bold text-[var(--text-primary)]">Platform Transactions</h3>
-        <button className="flex items-center gap-2 px-3 py-1.5 bg-[var(--bg-secondary)] rounded-lg text-sm font-medium hover:bg-gray-200">
+        <div>
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Platform Transactions</h3>
+          <p className="text-sm text-[var(--text-secondary)]">{transactions.length} total transactions</p>
+        </div>
+        <button
+          onClick={exportTransactionsCSV}
+          disabled={transactions.length === 0}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            transactions.length === 0
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-[var(--primary-500)] text-white hover:bg-[var(--primary-600)]'
+          }`}
+        >
           <FaDownload size={12} /> Export CSV
         </button>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
-              <th className="pb-3 font-medium">Transaction ID</th>
-              <th className="pb-3 font-medium">User</th>
-              <th className="pb-3 font-medium">Type</th>
-              <th className="pb-3 font-medium">Amount</th>
-              <th className="pb-3 font-medium">Status</th>
-              <th className="pb-3 font-medium">Date</th>
-            </tr>
-          </thead>
-          <tbody className="text-sm">
-            {transactionsList.map((trx) => (
-              <tr key={trx.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
-                <td className="py-4 font-medium text-[var(--text-tertiary)]">{trx.id}</td>
-                <td className="py-4 font-medium">{trx.user}</td>
-                <td className="py-4 text-[var(--text-secondary)]">{trx.type}</td>
-                <td className="py-4 font-bold text-[var(--text-primary)]">{trx.amount}</td>
-                <td className="py-4">
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${trx.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                      trx.status === 'Processing' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                    }`}>
-                    {trx.status}
-                  </span>
-                </td>
-                <td className="py-4 text-[var(--text-tertiary)]">{trx.date}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+
+      {transactionsLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--primary-600)]"></div>
+        </div>
+      ) : transactionsError ? (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          Error loading transactions: {transactionsError}
+        </div>
+      ) : transactions.length === 0 ? (
+        <div className="text-center py-12 text-[var(--text-secondary)]">
+          <FaMoneyBillWave size={48} className="mx-auto mb-4 opacity-20" />
+          <p>No transactions yet</p>
+        </div>
+      ) : (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+              <p className="text-xs text-green-600 font-medium">Total Revenue</p>
+              <p className="text-xl font-bold text-green-700">
+                {transactions.reduce((sum, t) => sum + t.amount, 0).toLocaleString()} FCFA
+              </p>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <p className="text-xs text-blue-600 font-medium">Completed</p>
+              <p className="text-xl font-bold text-blue-700">
+                {transactions.filter(t => ['paid', 'successful', 'completed'].includes(t.status)).length}
+              </p>
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+              <p className="text-xs text-yellow-600 font-medium">Pending</p>
+              <p className="text-xl font-bold text-yellow-700">
+                {transactions.filter(t => ['pending_payment', 'initiated', 'processing'].includes(t.status)).length}
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-sm text-[var(--text-secondary)] border-b border-[var(--border-light)]">
+                  <th className="pb-3 font-medium">Order ID</th>
+                  <th className="pb-3 font-medium">Customer</th>
+                  <th className="pb-3 font-medium">Payment Method</th>
+                  <th className="pb-3 font-medium">Amount</th>
+                  <th className="pb-3 font-medium">Status</th>
+                  <th className="pb-3 font-medium">Date</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm">
+                {transactions.map((trx) => (
+                  <tr key={trx.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
+                    <td className="py-4 font-medium text-[var(--primary-600)]">{trx.orderId}</td>
+                    <td className="py-4">
+                      <p className="font-medium text-[var(--text-primary)]">{trx.customer}</p>
+                      <p className="text-xs text-[var(--text-secondary)]">{trx.customerPhone}</p>
+                    </td>
+                    <td className="py-4 text-[var(--text-secondary)]">{trx.type}</td>
+                    <td className="py-4 font-bold text-[var(--text-primary)]">{trx.amount.toLocaleString()} FCFA</td>
+                    <td className="py-4">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${getStatusColor(trx.status)}`}>
+                        {formatStatus(trx.status)}
+                      </span>
+                    </td>
+                    <td className="py-4 text-[var(--text-tertiary)]">
+                      {new Date(trx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </motion.div>
   );
 
@@ -1054,6 +1363,86 @@ const AdminDashboard = () => {
                   <>
                     <FaBan size={16} />
                     Suspend User
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  // Unsuspend User Modal
+  const UnsuspendUserModal = () => (
+    <AnimatePresence>
+      {unsuspendModal.open && (
+        <motion.div
+          key="unsuspend-modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setUnsuspendModal({ open: false, user: null })}
+        >
+          <motion.div
+            key="unsuspend-modal-content"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-green-500/30 flex items-center justify-center">
+                  <FaCheckCircle size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Unsuspend User</h2>
+                  <p className="text-sm text-green-100">Restore user access</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-[var(--text-secondary)] text-sm">
+                  You are about to unsuspend <span className="font-bold text-green-700">{unsuspendModal.user?.full_name}</span>
+                </p>
+                <p className="text-[var(--text-secondary)] text-sm mt-2">
+                  This user will regain full access to the platform.
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
+              <button
+                onClick={() => setUnsuspendModal({ open: false, user: null })}
+                disabled={unsuspendLoading}
+                className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitUnsuspendUser}
+                disabled={unsuspendLoading}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {unsuspendLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Unsuspending...
+                  </>
+                ) : (
+                  <>
+                    <FaCheckCircle size={16} />
+                    Unsuspend User
                   </>
                 )}
               </button>
@@ -1423,6 +1812,7 @@ const AdminDashboard = () => {
       {/* Modals */}
       <UserDetailsModal />
       <SuspendUserModal />
+      <UnsuspendUserModal />
       <AddAdminModal />
       <EditProfileModal />
       <FarmerActionModal />

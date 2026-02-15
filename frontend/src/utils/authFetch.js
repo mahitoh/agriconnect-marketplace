@@ -80,6 +80,24 @@ export const authFetch = async (url, options = {}) => {
 
   let res = await fetch(url, { ...options, headers });
 
+  // If 403 with ACCOUNT_SUSPENDED → force logout immediately
+  if (res.status === 403) {
+    let body;
+    try {
+      body = await res.clone().json();
+    } catch { body = {}; }
+
+    if (body.code === 'ACCOUNT_SUSPENDED') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      if (!window.location.pathname.includes('/login')) {
+        alert('Your account has been suspended. You have been logged out.');
+        window.location.href = '/login?suspended=1';
+      }
+      throw new Error('Account suspended');
+    }
+  }
+
   // If 401 with "Token expired" → try refresh
   if (res.status === 401) {
     let body;

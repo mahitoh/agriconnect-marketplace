@@ -10,7 +10,7 @@ const getAllUsers = async (req, res, next) => {
     
     const { data: users, error } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, phone, role, approved, created_at, updated_at')
+      .select('id, full_name, phone, role, approved, suspended, created_at, updated_at')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -194,11 +194,11 @@ const getDashboardAnalytics = async (req, res, next) => {
       .from('reviews')
       .select('*', { count: 'exact', head: true });
 
-    // Calculate total revenue
+    // Calculate total revenue (paid, processing, shipped, completed orders)
     const { data: orders } = await supabaseAdmin
       .from('orders')
       .select('total_amount')
-      .eq('payment_status', 'paid');
+      .in('status', ['paid', 'processing', 'shipped', 'completed']);
 
     const totalRevenue = orders?.reduce((sum, order) => sum + parseFloat(order.total_amount), 0) || 0;
 
@@ -881,6 +881,8 @@ const suspendUser = async (req, res, next) => {
     const userId = req.params.id;
     const { reason = '' } = req.body || {};
 
+    console.log('🔍 Attempting to suspend user:', userId);
+
     // Check if user exists
     const { data: profile, error: fetchError } = await supabaseAdmin
       .from('profiles')
@@ -888,10 +890,22 @@ const suspendUser = async (req, res, next) => {
       .eq('id', userId)
       .single();
 
-    if (fetchError || !profile) {
+    if (fetchError) {
+      console.error('❌ Fetch error:', fetchError);
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
+        error: fetchError.message,
+        userId: userId
+      });
+    }
+
+    if (!profile) {
+      console.error('❌ No profile found for userId:', userId);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        userId: userId
       });
     }
 
@@ -911,6 +925,16 @@ const suspendUser = async (req, res, next) => {
         message: 'Failed to suspend user',
         error: updateError.message
       });
+    }
+
+    // Ban the user in Supabase Auth so their sessions are invalidated
+    try {
+      await supabaseAdmin.auth.admin.updateUserById(userId, {
+        ban_duration: '876000h' // ~100 years = effectively permanent
+      });
+      console.log('✅ User banned in Supabase Auth:', userId);
+    } catch (banError) {
+      console.error('⚠️ Failed to ban user in Supabase Auth:', banError);
     }
 
     res.status(200).json({
@@ -966,6 +990,16 @@ const unsuspendUser = async (req, res, next) => {
       });
     }
 
+    // Unban the user in Supabase Auth so they can log in again
+    try {
+      await supabaseAdmin.auth.admin.updateUserById(userId, {
+        ban_duration: 'none'
+      });
+      console.log('✅ User unbanned in Supabase Auth:', userId);
+    } catch (unbanError) {
+      console.error('⚠️ Failed to unban user in Supabase Auth:', unbanError);
+    }
+
     res.status(200).json({
       success: true,
       message: `${profile.full_name} has been unsuspended`,
@@ -975,6 +1009,159 @@ const unsuspendUser = async (req, res, next) => {
     });
   } catch (error) {
     console.error('❌ unsuspendUser error:', error);
+    next(error);
+  }
+};
+
+/**
+ * Get all platform transactions (orders with payment info)
+ * GET /api/admin/transactions
+ */
+const getTransactions = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get orders with customer info and items
+    const { data: orders, error, count } = await supabaseAdmin
+      .from('orders')
+      .select(`
+        id,
+        customer_id,
+        total_amount,
+        status,
+        created_at,
+        updated_at,
+        profiles!orders_customer_id_fkey (full_name, phone)
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
+
+    if (error) {
+      console.error('❌ Transactions fetch error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch transactions',
+        error: error.message
+      });
+    }
+
+    // Map to transaction format
+    const transactions = (orders || []).map(order => ({
+      id: order.id,
+      orderId: `ORD-${order.id.slice(0, 8).toUpperCase()}`,
+      customer: order.profiles?.full_name || 'Unknown',
+      customerPhone: order.profiles?.phone || 'N/A',
+      type: 'Mobile Money',
+      amount: parseFloat(order.total_amount || 0),
+      status: order.status,
+      orderStatus: order.status,
+      date: order.created_at,
+      updatedAt: order.updated_at
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        transactions,
+        total: count || 0,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil((count || 0) / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('❌ getTransactions error:', error);
+    next(error);
+  }
+};
+
+/**
+ * Get top farmers by revenue
+ * GET /api/admin/analytics/top-farmers
+ */
+const getTopFarmers = async (req, res, next) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    // Get all order items with farmer and product info
+    const { data: orderItems, error } = await supabaseAdmin
+      .from('order_items')
+      .select(`
+        quantity,
+        unit_price,
+        line_total,
+        farmer_id,
+        orders!inner (status),
+        products (name)
+      `);
+
+    if (error) {
+      console.error('❌ Top farmers fetch error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch top farmers data',
+        error: error.message
+      });
+    }
+
+    // Aggregate revenue per farmer
+    const farmerRevenue = {};
+    (orderItems || []).forEach(item => {
+      if (!item.farmer_id) return;
+      
+      if (!farmerRevenue[item.farmer_id]) {
+        farmerRevenue[item.farmer_id] = {
+          id: item.farmer_id,
+          revenue: 0,
+          orderCount: 0,
+          productsSold: 0
+        };
+      }
+
+      const itemTotal = parseFloat(item.line_total || 0) || (parseFloat(item.unit_price || 0) * item.quantity);
+      farmerRevenue[item.farmer_id].revenue += itemTotal;
+      farmerRevenue[item.farmer_id].orderCount += 1;
+      farmerRevenue[item.farmer_id].productsSold += item.quantity;
+    });
+
+    // Get farmer profile data for top farmers
+    const farmerIds = Object.keys(farmerRevenue);
+    let farmerProfiles = {};
+
+    if (farmerIds.length > 0) {
+      const { data: profiles } = await supabaseAdmin
+        .from('profiles')
+        .select('id, full_name, phone')
+        .in('id', farmerIds);
+
+      (profiles || []).forEach(p => {
+        farmerProfiles[p.id] = p;
+      });
+    }
+
+    // Build and sort top farmers list
+    const topFarmersList = Object.values(farmerRevenue)
+      .map(f => ({
+        id: f.id,
+        name: farmerProfiles[f.id]?.full_name || 'Unknown Farmer',
+        phone: farmerProfiles[f.id]?.phone || 'N/A',
+        revenue: parseFloat(f.revenue.toFixed(2)),
+        orderCount: f.orderCount,
+        productsSold: f.productsSold
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, parseInt(limit));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        farmers: topFarmersList,
+        count: topFarmersList.length
+      }
+    });
+  } catch (error) {
+    console.error('❌ getTopFarmers error:', error);
     next(error);
   }
 };
@@ -994,6 +1181,8 @@ module.exports = {
   promoteUserToAdmin,
   viewUserDetails,
   suspendUser,
-  unsuspendUser
+  unsuspendUser,
+  getTransactions,
+  getTopFarmers
 };
 
