@@ -1,219 +1,276 @@
-# 🎨 AgriConnect Frontend
-## User Interface for the Digital Farmer-to-Consumer Marketplace
+# � AgriConnect Marketplace
+
+### A Digital Farmer-to-Consumer Marketplace Platform
+
+AgriConnect is a full-stack web application that connects local farmers in Cameroon directly with consumers, enabling them to list, discover, and purchase fresh agricultural products online with secure MTN Mobile Money payments.
 
 ---
 
-## 📌 Overview
+## 📌 Project Overview
 
-The **AgriConnect Frontend** is a responsive web interface that enables farmers, consumers, and administrators to interact with the AgriConnect digital marketplace. It provides an intuitive, accessible, and user-friendly experience for browsing agricultural products, managing orders, and making secure payments via MTN Mobile Money.
+The agricultural sector in Cameroon faces challenges in connecting small-scale farmers with consumers. AgriConnect bridges this gap by providing a digital marketplace where:
 
-The frontend communicates with the backend through RESTful APIs and ensures seamless navigation across all user roles.
-
----
-
-## 🎯 Frontend Objectives
-
-- Provide a clean and intuitive user interface
-- Enable easy navigation for different user roles
-- Display real-time product and transaction data
-- Ensure mobile and desktop responsiveness
-- Facilitate secure payment initiation via MTN Mobile Money
+- **Farmers** can list their products, manage inventory, track orders, and receive payments
+- **Consumers** can browse products, discover local farmers, place orders, and pay via mobile money
+- **Administrators** can oversee the platform, approve farmers, manage users, and monitor transactions
 
 ---
 
-## 🧱 Frontend Technology Stack
+## 🧱 Technology Stack
 
-- **React.js** – Component-based UI development
-- **Tailwind CSS** – Responsive and modern styling
-- **React Router** – Client-side routing
-- **Axios** – API communication
-- **Context API** – Authentication and global state management
+### Frontend
+| Technology | Purpose |
+|---|---|
+| **React.js 18** | Component-based UI development |
+| **Vite** | Fast build tool and dev server |
+| **Tailwind CSS** | Utility-first responsive styling |
+| **React Router v6** | Client-side routing and navigation |
+| **React Query (TanStack)** | Server state management and data fetching |
+| **Framer Motion** | Animations and transitions |
+| **Axios** | HTTP client for API communication |
+| **Context API** | Auth, Cart, and Favorites global state |
+| **Radix UI** | Accessible headless UI primitives |
 
----
+### Backend
+| Technology | Purpose |
+|---|---|
+| **Node.js** | JavaScript runtime |
+| **Express.js v5** | REST API framework |
+| **Supabase** | PostgreSQL database + Auth + Storage |
+| **JWT (jsonwebtoken)** | Token-based authentication |
+| **bcryptjs** | Password hashing |
+| **Multer** | File/image uploads |
+| **express-validator** | Request validation |
+| **Axios** | External API calls (MTN MoMo) |
 
-## 🧭 Application Navigation Structure
-
-The frontend uses **role-based navigation**, meaning menus and pages change depending on whether the user is a **Farmer**, **Consumer**, or **Administrator**.
-
----
-
-## 🗂️ Pages & Screens
-
-### 🔓 Public Pages (Accessible to All Users)
-
-| Page | Description |
-|----|----|
-| Home | Landing page introducing the platform |
-| Login | User authentication page |
-| Register | User account creation page |
-| Marketplace | Public product browsing page |
-| Product Details | Detailed view of a selected product |
-| About | Information about the platform |
-| Contact | Support and contact information |
-
----
-
-### 👩‍🌾 Farmer Pages
-
-| Page | Description |
-|----|----|
-| Farmer Dashboard | Overview of sales, orders, and products |
-| Add Product | Form to upload new agricultural products |
-| Manage Products | Edit or delete existing products |
-| Orders | View and manage incoming consumer orders |
-| Payments | View received payments and transaction history |
-| Profile | Manage farmer account details |
+### External Services
+| Service | Purpose |
+|---|---|
+| **Supabase** | Database (PostgreSQL), file storage, and auth |
+| **MTN Mobile Money API** | Payment processing |
 
 ---
 
-### 🛒 Consumer Pages
+## ✅ Features Implemented
 
-| Page | Description |
-|----|----|
-| Consumer Dashboard | Overview of orders and spending |
-| Cart | View selected products before checkout |
-| Checkout | Order confirmation and payment initiation |
-| Payment Status | Display MTN MoMo payment result |
-| Orders | Track placed orders |
-| Profile | Manage consumer account information |
+### Authentication & Authorization
+- User registration with role selection (Farmer / Consumer)
+- Login with JWT-based authentication
+- Role-based access control (Consumer, Farmer, Admin)
+- Protected routes per user role
 
----
+### 🛒 Consumer Features
+- Browse marketplace with search, category filters, location filters, and sorting
+- View detailed product pages
+- Add products to cart (grouped by farmer)
+- Checkout with MTN Mobile Money payment
+- Order history and tracking
+- Wishlist / favorites (products and farmers)
+- Rate and review purchased products
+- Consumer dashboard with order overview
 
-### 🛠️ Administrator Pages
+### 👩‍🌾 Farmer Features
+- Farmer dashboard with sales overview and statistics
+- Add, edit, and delete products with image upload
+- Inventory management with low-stock alerts
+- Order management (view and track incoming orders)
+- Notification system (orders, reviews, stock alerts)
+- Profile management with avatar and farm banner upload
+- Public farmer profile page visible to consumers
 
-| Page | Description |
-|----|----|
-| Admin Dashboard | System overview and statistics |
-| User Management | Approve or suspend farmers |
-| Product Management | Monitor all listed products |
-| Transaction Logs | View payment and order records |
-| Reports | Platform activity summaries |
+### 🛠️ Admin Features
+- Admin dashboard with platform statistics and activity feed
+- User management (view, suspend, unsuspend, delete users)
+- Farmer approval system (approve/reject pending farmers)
+- Transaction monitoring and reporting
+- Top farmers leaderboard
+- Add new admin accounts
 
----
+### 💳 Payment Integration
+- MTN Mobile Money payment initiation
+- Real-time payment status checking
+- Payment confirmation and order creation
+- Transaction history
 
-## 🧩 Reusable UI Components
-
-### Core Components
-- Navbar
-- Footer
-- Sidebar (role-based)
-- Product Card
-- Order Card
-- Payment Modal
-- Alert / Notification Component
-- Loader / Spinner
-
-### Form Components
-- Input Fields
-- Select Dropdowns
-- Buttons
-- Validation Messages
-
----
-
-## 🔁 User Flow (Frontend Perspective)
-
-### Consumer Flow
-```
-Home → Marketplace → Product Details → Cart → Checkout → MTN MoMo Payment → Order Confirmation
-```
-
-### Farmer Flow
-```
-Login → Farmer Dashboard → Add Product → Receive Orders → View Payments
-```
-
-### Admin Flow
-```
-Login → Admin Dashboard → User Approval → Transaction Monitoring
-```
+### 🎨 UI/UX
+- Fully responsive design (mobile + desktop)
+- Skeleton loading states for smooth perceived performance
+- Animated transitions with Framer Motion
+- Agricultural-themed color palette
+- Role-based navigation and sidebar
 
 ---
 
-## 💳 Payment UI Integration (MTN MoMo)
-
-The frontend initiates payments by:
-- Collecting phone number and amount
-- Sending payment request to backend
-- Displaying payment status (pending, success, failed)
-- Redirecting user after confirmation
-
-All sensitive payment logic is handled by the backend.
-
----
-
-## 📁 Frontend Folder Structure
+## 📁 Project Structure
 
 ```
-frontend/
-├── public/
-├── src/
-│   ├── assets/
-│   ├── components/
-│   ├── pages/
-│   ├── services/
-│   ├── context/
-│   ├── data/
-│   ├── App.jsx
-│   └── main.jsx
-├── package.json
+agriconnect-marketplace/
+├── backend/
+│   ├── src/
+│   │   ├── server.js              # Express app entry point
+│   │   ├── config/
+│   │   │   └── supabase.js        # Supabase client configuration
+│   │   ├── controllers/           # Route handler logic
+│   │   │   ├── authController.js
+│   │   │   ├── productController.js
+│   │   │   ├── orderController.js
+│   │   │   ├── adminController.js
+│   │   │   ├── paymentController.js
+│   │   │   ├── reviewController.js
+│   │   │   ├── inventoryController.js
+│   │   │   └── ...
+│   │   ├── middleware/
+│   │   │   ├── auth.js            # JWT authentication middleware
+│   │   │   ├── errorHandler.js    # Global error handling
+│   │   │   └── multer.js          # File upload config
+│   │   ├── routes/                # API route definitions
+│   │   └── services/
+│   │       └── mtnPayment.js      # MTN MoMo integration
+│   └── package.json
+│
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx                # Root component with routing
+│   │   ├── main.jsx               # App entry point
+│   │   ├── components/
+│   │   │   ├── layout/            # Navbar, Footer
+│   │   │   ├── ui/                # Reusable UI (Button, Input, Skeleton, etc.)
+│   │   │   ├── farmer/            # Farmer profile components
+│   │   │   ├── ProductCard.jsx
+│   │   │   ├── FarmerCard.jsx
+│   │   │   └── PaymentForm.jsx
+│   │   ├── pages/
+│   │   │   ├── Home.jsx
+│   │   │   ├── Marketplace.jsx
+│   │   │   ├── Farmers.jsx
+│   │   │   ├── FarmerProfile.jsx
+│   │   │   ├── ProductDetails.jsx
+│   │   │   ├── Cart.jsx
+│   │   │   ├── Checkout.jsx
+│   │   │   ├── Login.jsx
+│   │   │   ├── Register.jsx
+│   │   │   ├── dashboard/         # Farmer & Consumer dashboards
+│   │   │   └── admin/             # Admin dashboard
+│   │   ├── context/               # AuthContext, CartContext, FavoritesContext
+│   │   ├── hooks/                 # React Query hooks
+│   │   ├── config/                # API configuration
+│   │   ├── data/                  # Mock/static data
+│   │   └── utils/                 # Auth fetch helper
+│   ├── package.json
+│   └── vite.config.js
 └── README.md
 ```
 
 ---
 
-## 📱 Responsiveness & Accessibility
+## 🔌 API Endpoints
 
-- Mobile-first design approach
-- Responsive layouts using Tailwind CSS
-- Accessible buttons, forms, and navigation
-- Consistent color scheme and typography
-
----
-
-## 🧪 Frontend Testing
-
-- Manual UI testing
-- Form validation testing
-- Role-based navigation testing
-- Payment flow testing with MTN MoMo sandbox
-
----
-
-## 🎨 UI/UX Design Guidelines
-
-- Minimalist and clean design
-- Agricultural-themed color palette
-- Clear call-to-action buttons
-- Non-AI-generated layout approach
-- Consistent spacing and typography
+| Route | Description |
+|---|---|
+| `/api/auth` | Register, login, password reset |
+| `/api/products` | CRUD operations for products |
+| `/api/orders` | Order creation and management |
+| `/api/reviews` | Product reviews and ratings |
+| `/api/favorites` | Wishlist and farmer following |
+| `/api/profile` | User profile management |
+| `/api/inventory` | Stock management and alerts |
+| `/api/marketplace` | Public product and farmer listings |
+| `/api/notifications` | Farmer notification system |
+| `/api/payment` | MTN Mobile Money payments |
+| `/api/cart` | Shopping cart operations |
+| `/api/admin` | Admin user/platform management |
+| `/api/moderation` | Content moderation |
 
 ---
 
-## 📈 Future Frontend Enhancements
+## 🚀 Getting Started
 
-- Mobile app UI
-- Dark mode
-- Multi-language support
-- Real-time notifications
-- Product reviews and ratings
+### Prerequisites
+- Node.js (v18+)
+- npm or yarn
+- A Supabase account and project
+- MTN MoMo API credentials (for payments)
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/mahitoh/agriconnect-marketplace.git
+cd agriconnect-marketplace
+```
+
+### 2. Backend setup
+```bash
+cd backend
+npm install
+```
+
+Create a `.env` file in the `backend/` folder:
+```env
+PORT=5000
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+JWT_SECRET=your_jwt_secret
+FRONTEND_URL=http://localhost:5173
+MTN_API_KEY=your_mtn_api_key
+MTN_API_SECRET=your_mtn_secret
+```
+
+Start the backend:
+```bash
+npm run dev
+```
+
+### 3. Frontend setup
+```bash
+cd frontend
+npm install
+```
+
+Start the frontend:
+```bash
+npm run dev
+```
+
+The app will be available at `http://localhost:5173`
 
 ---
 
-## 📚 Academic Justification
+## 🔁 User Flows
 
-The frontend design ensures usability, accessibility, and transparency, making it suitable for real-world agricultural trade systems and aligning with software engineering best practices taught at The ICT University.
+### Consumer Flow
+```
+Home → Marketplace → Product Details → Add to Cart → Checkout → MTN MoMo Payment → Order Confirmation
+```
+
+### Farmer Flow
+```
+Register as Farmer → Await Approval → Dashboard → Add Products → Receive Orders → View Payments
+```
+
+### Admin Flow
+```
+Login → Admin Dashboard → Approve Farmers → Manage Users → Monitor Transactions
+```
+
+---
+
+## 📱 Responsiveness
+
+- Mobile-first design using Tailwind CSS
+- Responsive grid layouts for product and farmer listings
+- Collapsible sidebar navigation on dashboards
+- Touch-friendly interactions
 
 ---
 
 ## 👨‍🎓 Author
 
-**Name:** [Your Full Name]  
+**Name:** Mahito  
 **Department:** Information and Communication Technology  
-**Institution:** The ICT University, Cameroon  
+**Institution:** The ICT University, Cameroon
 
 ---
 
 ## 📜 License
 
-This frontend application is developed strictly for academic purposes.
+This project is developed for academic purposes as part of a university project at The ICT University, Cameroon.
