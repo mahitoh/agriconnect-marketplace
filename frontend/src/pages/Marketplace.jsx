@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaFilter, FaTh, FaList, FaSearch, FaTimes } from 'react-icons/fa';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import ProductCard from '../components/ProductCard';
+import { ProductGridSkeleton } from '../components/ui/skeleton';
 import { products as mockProducts } from '../data/mockData';
 import { useCart } from '../context/CartContext';
-import { API_ENDPOINTS } from '../config/api';
+import { useProducts } from '../hooks/useQueries';
 
 const Marketplace = () => {
   const { addToCart } = useCart();
@@ -17,79 +18,54 @@ const Marketplace = () => {
   const [priceRange, setPriceRange] = useState([0, 100000]);
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [sortBy, setSortBy] = useState('featured');
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // Fetch products from API
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+  // Fetch products via React Query
+  const { data: rawProducts = [], isLoading: loading, error: queryError } = useProducts();
 
-  const fetchProducts = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(API_ENDPOINTS.PRODUCTS);
-      const data = await response.json();
+  // Transform API products to match ProductCard format
+  const products = useMemo(() => {
+    if (!rawProducts || rawProducts.length === 0) return queryError ? mockProducts : [];
+    return rawProducts.map(product => {
+      const farmerProfile = product.profiles || (Array.isArray(product.profiles) ? product.profiles[0] : null);
+      const farmerName = farmerProfile?.full_name || product.farmer_name || 'Farmer';
+      const farmerLocation = farmerProfile?.location || product.harvest_location || product.location || 'Location not specified';
 
-      if (data.success && data.data.products) {
-        // Transform API products to match ProductCard format
-        const transformedProducts = data.data.products.map(product => {
-          // Handle different response formats
-          const farmerProfile = product.profiles || (Array.isArray(product.profiles) ? product.profiles[0] : null);
-          const farmerName = farmerProfile?.full_name || product.farmer_name || 'Farmer';
-          const farmerLocation = farmerProfile?.location || product.harvest_location || product.location || 'Location not specified';
-          
-          console.log('🔍 Product:', product.name, 'Farmer:', farmerName, 'Profile data:', product.profiles);
-          
-          // Determine badge based on category
-          const badgeMap = {
-            'vegetables': 'Fresh',
-            'fruits': 'Popular',
-            'grains': 'Bio',
-            'livestock': 'Fresh',
-            'dairy': 'Fresh',
-            'other': 'New'
-          };
-          const badge = badgeMap[product.category] || 'New';
-          const badgeColors = {
-            'Fresh': '#ef5350',
-            'Popular': '#2d5f3f',
-            'Bio': '#66bb6a',
-            'New': '#2196f3'
-          };
+      const badgeMap = {
+        'vegetables': 'Fresh',
+        'fruits': 'Popular',
+        'grains': 'Bio',
+        'livestock': 'Fresh',
+        'dairy': 'Fresh',
+        'other': 'New'
+      };
+      const badge = badgeMap[product.category] || 'New';
+      const badgeColors = {
+        'Fresh': '#ef5350',
+        'Popular': '#2d5f3f',
+        'Bio': '#66bb6a',
+        'New': '#2196f3'
+      };
 
-          return {
-            id: product.id,
-            name: product.name,
-            image: product.image_url || 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=500&h=350&fit=crop',
-            badge: badge,
-            badgeColor: badgeColors[badge] || '#2d5f3f',
-            rating: product.rating || '0.0', // Use rating from API
-            reviews: product.reviews?.toString() || '0', // Use reviews from API
-            farmer: farmerName,
-            location: farmerLocation,
-            price: `${product.price.toLocaleString()} FCFA`,
-            oldPrice: null,
-            category: product.category,
-            quantity: product.quantity,
-            description: product.description
-          };
-        });
-        setProducts(transformedProducts);
-      } else {
-        throw new Error('Failed to fetch products');
-      }
-    } catch (err) {
-      console.error('Error fetching products:', err);
-      setError('Failed to load products. Showing sample products.');
-      // Fallback to mock data
-      setProducts(mockProducts);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return {
+        id: product.id,
+        name: product.name,
+        image: product.image_url || 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=500&h=350&fit=crop',
+        badge,
+        badgeColor: badgeColors[badge] || '#2d5f3f',
+        rating: product.rating || '0.0',
+        reviews: product.reviews?.toString() || '0',
+        farmer: farmerName,
+        location: farmerLocation,
+        price: `${product.price.toLocaleString()} FCFA`,
+        oldPrice: null,
+        category: product.category,
+        quantity: product.quantity,
+        description: product.description
+      };
+    });
+  }, [rawProducts, queryError]);
+
+  const error = queryError ? 'Failed to load products. Showing sample products.' : null;
 
   const handleAddToCart = (product) => {
     const priceValue = typeof product.price === 'string' 
@@ -383,9 +359,8 @@ const Marketplace = () => {
 
               {/* Products */}
               {loading ? (
-                <div className="text-center py-20">
-                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--primary-500)] mb-4"></div>
-                  <p className="text-[var(--text-secondary)]">Loading products...</p>
+                <div className="py-8">
+                  <ProductGridSkeleton count={6} viewMode={viewMode} />
                 </div>
               ) : error ? (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">

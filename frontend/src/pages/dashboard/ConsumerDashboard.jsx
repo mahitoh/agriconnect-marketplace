@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -18,6 +18,7 @@ import {
   FaTrash,
   FaPlus
 } from 'react-icons/fa';
+import { useQueryClient } from '@tanstack/react-query';
 import Navbar from '../../components/layout/Navbar';
 import Footer from '../../components/layout/Footer';
 import Input from '../../components/ui/input';
@@ -25,6 +26,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useFavorites } from '../../context/FavoritesContext';
 import { API_ENDPOINTS } from '../../config/api';
 import { authFetch } from '../../utils/authFetch';
+import { useMyOrders, useReviewableProducts } from '../../hooks/useQueries';
+import { OrdersListSkeleton } from '../../components/ui/skeleton';
 
 const SECTIONS = {
   DASHBOARD: 'dashboard',
@@ -40,60 +43,18 @@ const ConsumerDashboard = () => {
   const { user, logout } = useAuth();
   const { likedProducts, toggleLikeProduct, refreshFavorites } = useFavorites();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  // Orders state
-  const [orders, setOrders] = useState([]);
-  const [ordersLoading, setOrdersLoading] = useState(false);
+  // Orders via React Query
+  const { data: orders = [], isLoading: ordersLoading } = useMyOrders();
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [orderDetailsModal, setOrderDetailsModal] = useState(false);
   
-  // Reviewable products state
-  const [reviewableProducts, setReviewableProducts] = useState([]);
+  // Reviewable products via React Query
+  const { data: reviewableProducts = [] } = useReviewableProducts();
   const [reviewModal, setReviewModal] = useState({ isOpen: false, product: null });
   const [reviewForm, setReviewForm] = useState({ rating: 0, comment: '' });
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
-
-  // Fetch orders from API
-  useEffect(() => {
-    if (activeSection === SECTIONS.ORDERS || activeSection === SECTIONS.DASHBOARD) {
-      fetchOrders();
-    }
-  }, [activeSection]);
-
-  // Fetch orders and reviewable products on mount
-  useEffect(() => {
-    fetchOrders();
-    fetchReviewableProducts();
-  }, []);
-
-  const fetchOrders = async () => {
-    setOrdersLoading(true);
-    try {
-      const response = await authFetch(API_ENDPOINTS.MY_ORDERS);
-      if (response.ok) {
-        const data = await response.json();
-        setOrders(data.data?.orders || []);
-      }
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-    } finally {
-      setOrdersLoading(false);
-    }
-  };
-
-  const fetchReviewableProducts = async () => {
-    try {
-      const response = await authFetch(API_ENDPOINTS.REVIEW_MY_REVIEWABLE);
-      if (response.ok) {
-        const data = await response.json();
-        const products = data.data?.products || [];
-        setReviewableProducts(products);
-      }
-    } catch (error) {
-      console.error('Error fetching reviewable products:', error);
-      setReviewableProducts([]);
-    }
-  };
 
   const handleSubmitReview = async () => {
     if (!reviewModal.product || reviewForm.rating === 0) {
@@ -133,7 +94,7 @@ const ConsumerDashboard = () => {
         alert('Review submitted successfully!');
         setReviewModal({ isOpen: false, product: null });
         setReviewForm({ rating: 0, comment: '' });
-        fetchReviewableProducts(); // Refresh the list
+        queryClient.invalidateQueries({ queryKey: ['reviewable-products'] }); // Refresh the list
       } else {
         console.error('Review submission error:', data);
         alert(data.message || 'Failed to submit review');
@@ -252,9 +213,7 @@ const ConsumerDashboard = () => {
         </div>
         <div className="space-y-4">
           {ordersLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--primary-500)] border-t-transparent"></div>
-            </div>
+            <OrdersListSkeleton count={3} />
           ) : orders.length === 0 ? (
             <p className="text-center py-8 text-[var(--text-secondary)]">No orders yet. Start shopping from the marketplace!</p>
           ) : (
@@ -349,10 +308,7 @@ const ConsumerDashboard = () => {
         <h3 className="text-lg font-bold text-[var(--text-primary)] mb-6">Order History</h3>
         
         {ordersLoading ? (
-          <div className="text-center py-8">
-            <div className="w-8 h-8 border-4 border-[var(--primary-200)] border-t-[var(--primary-500)] rounded-full animate-spin mx-auto"></div>
-            <p className="text-[var(--text-secondary)] mt-2">Loading orders...</p>
-          </div>
+          <OrdersListSkeleton count={5} />
         ) : orders.length === 0 ? (
           <div className="text-center py-12">
             <FaShoppingBag size={48} className="text-[var(--text-tertiary)] mx-auto mb-4" />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   FaUsers,
   FaTractor,
@@ -17,6 +18,7 @@ import {
   FaExclamationTriangle,
   FaEdit,
   FaBan,
+  FaTrash,
   FaDownload,
   FaTimes,
   FaArrowLeft,
@@ -26,9 +28,16 @@ import {
 import Navbar from '../../components/layout/Navbar';
 import Footer from '../../components/layout/Footer';
 import Input from '../../components/ui/input';
+import { ActivityFeedSkeleton, TableSkeleton, UserDetailsSkeleton } from '../../components/ui/skeleton';
 import { useAuth } from '../../context/AuthContext';
 import { API_ENDPOINTS } from '../../config/api';
 import { authFetch } from '../../utils/authFetch';
+import {
+  useAdminUsers,
+  useAdminDashboard,
+  useAdminTransactions,
+  useAdminPendingFarmers,
+} from '../../hooks/useQueries';
 
 const SECTIONS = {
   OVERVIEW: 'overview',
@@ -43,13 +52,40 @@ const AdminDashboard = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [pendingFarmers, setPendingFarmers] = useState([]);
-  const [loadingFarmers, setLoadingFarmers] = useState(false);
-  const [farmerError, setFarmerError] = useState(null);
-  const [allUsers, setAllUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [usersError, setUsersError] = useState(null);
-  
+  const queryClient = useQueryClient();
+
+  // ─── React Query hooks ──────────────────────────────────
+  const isAdmin = user?.role === 'admin';
+  const {
+    data: allUsers = [],
+    isLoading: loadingUsers,
+    error: usersQueryError,
+  } = useAdminUsers(isAdmin);
+  const usersError = usersQueryError?.message || null;
+
+  const {
+    data: adminDashData,
+    isLoading: activityLoading,
+  } = useAdminDashboard(isAdmin);
+  const recentActivity = adminDashData?.activity || [];
+  const topFarmers = adminDashData?.topFarmers || [];
+  const dashboardStats = adminDashData?.dashboardStats || null;
+
+  const {
+    data: transactions = [],
+    isLoading: transactionsLoading,
+    error: txQueryError,
+  } = useAdminTransactions(isAdmin);
+  const transactionsError = txQueryError?.message || null;
+
+  const {
+    data: pendingFarmersData,
+    isLoading: loadingFarmers,
+    error: farmersQueryError,
+  } = useAdminPendingFarmers(isAdmin);
+  const pendingFarmers = pendingFarmersData?.farmers || pendingFarmersData || [];
+  const farmerError = farmersQueryError?.message || null;
+
   // User detail modal state
   const [selectedUser, setSelectedUser] = useState(null);
   const [userDetails, setUserDetails] = useState(null);
@@ -62,6 +98,9 @@ const AdminDashboard = () => {
 
   // Unsuspend user modal state
   const [unsuspendModal, setUnsuspendModal] = useState({ open: false, user: null });
+  const [deleteModal, setDeleteModal] = useState({ open: false, user: null });
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [unsuspendLoading, setUnsuspendLoading] = useState(false);
 
   // Add admin modal state
@@ -83,150 +122,6 @@ const AdminDashboard = () => {
 
   // Farmer action handlers
   const [farmerAction, setFarmerAction] = useState(null); // { type: 'approve'|'reject', farmer: {} }
-
-  // Real dashboard data
-  const [recentActivity, setRecentActivity] = useState([]);
-  const [topFarmers, setTopFarmers] = useState([]);
-  const [activityLoading, setActivityLoading] = useState(false);
-
-  // Transactions data
-  const [transactions, setTransactions] = useState([]);
-  const [transactionsLoading, setTransactionsLoading] = useState(false);
-  const [transactionsError, setTransactionsError] = useState(null);
-
-  // Dashboard analytics
-  const [dashboardStats, setDashboardStats] = useState(null);
-
-  // Fetch all users from backend
-  React.useEffect(() => {
-    const fetchAllUsers = async () => {
-      setLoadingUsers(true);
-      setUsersError(null);
-      try {
-        const response = await authFetch(API_ENDPOINTS.ADMIN_USERS, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch users');
-        }
-
-        const data = await response.json();
-        console.log('👥 All users fetched:', data);
-        setAllUsers(data.data?.users || []);
-      } catch (error) {
-        console.error('❌ Error fetching users:', error);
-        setUsersError(error.message);
-      } finally {
-        setLoadingUsers(false);
-      }
-    };
-
-    // Only fetch if user is admin
-    if (user?.role === 'admin') {
-      fetchAllUsers();
-    }
-  }, [user?.role]);
-
-  // Fetch real activity and top farmers from admin API
-  React.useEffect(() => {
-    const fetchActivityAndFarmers = async () => {
-      setActivityLoading(true);
-      try {
-        // Fetch recent activity from admin analytics endpoint
-        const [activityRes, farmersRes, dashboardRes] = await Promise.all([
-          authFetch(API_ENDPOINTS.ADMIN_ACTIVITY, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-          }),
-          authFetch(API_ENDPOINTS.ADMIN_TOP_FARMERS, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-          }),
-          authFetch(API_ENDPOINTS.ADMIN_DASHBOARD, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-          })
-        ]);
-
-        // Process activity
-        if (activityRes.ok) {
-          const activityData = await activityRes.json();
-          const activities = (activityData.data?.activities || []).slice(0, 10).map(a => ({
-            id: a.id,
-            type: a.type === 'order' ? 'Order Placed' : a.type === 'product' ? 'Product Added' : 'Review Posted',
-            actor: a.description?.split(' ')[0] || 'User',
-            target: a.description || '',
-            time: new Date(a.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            rawType: a.type
-          }));
-          setRecentActivity(activities);
-        }
-
-        // Process top farmers
-        if (farmersRes.ok) {
-          const farmersData = await farmersRes.json();
-          const farmers = (farmersData.data?.farmers || []).map(f => ({
-            id: f.id,
-            name: f.name,
-            phone: f.phone || '',
-            revenue: `${Math.floor(f.revenue).toLocaleString()} FCFA`,
-            orderCount: f.orderCount,
-            productsSold: f.productsSold
-          }));
-          setTopFarmers(farmers);
-        }
-
-        // Process dashboard stats
-        if (dashboardRes.ok) {
-          const dashData = await dashboardRes.json();
-          setDashboardStats(dashData.data);
-        }
-      } catch (error) {
-        console.error('❌ Error fetching activity and farmers:', error);
-      } finally {
-        setActivityLoading(false);
-      }
-    };
-
-    if (user?.role === 'admin') {
-      fetchActivityAndFarmers();
-    }
-  }, [user?.role]);
-
-  // Fetch real transactions
-  React.useEffect(() => {
-    const fetchTransactions = async () => {
-      setTransactionsLoading(true);
-      setTransactionsError(null);
-      try {
-        const response = await authFetch(API_ENDPOINTS.ADMIN_TRANSACTIONS, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch transactions');
-        }
-
-        const data = await response.json();
-        console.log('💰 Transactions fetched:', data);
-        setTransactions(data.data?.transactions || []);
-      } catch (error) {
-        console.error('❌ Error fetching transactions:', error);
-        setTransactionsError(error.message);
-      } finally {
-        setTransactionsLoading(false);
-      }
-    };
-
-    if (user?.role === 'admin') {
-      fetchTransactions();
-    }
-  }, [user?.role]);
 
   // View user details
   const handleViewUserDetails = async (userId) => {
@@ -291,12 +186,8 @@ const AdminDashboard = () => {
       const data = await response.json();
       console.log('✅ User suspended:', data);
       
-      // Update users list
-      setAllUsers(allUsers.map(u => 
-        u.id === suspendModal.user.id 
-          ? { ...u, suspended: true }
-          : u
-      ));
+      // Invalidate users cache
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
 
       // Close modal
       setSuspendModal({ open: false, user: null });
@@ -341,12 +232,8 @@ const AdminDashboard = () => {
       const data = await response.json();
       console.log('✅ User unsuspended:', data);
       
-      // Update users list
-      setAllUsers(allUsers.map(u => 
-        u.id === unsuspendModal.user.id 
-          ? { ...u, suspended: false }
-          : u
-      ));
+      // Invalidate users cache
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
 
       // Close modal
       setUnsuspendModal({ open: false, user: null });
@@ -357,6 +244,44 @@ const AdminDashboard = () => {
       alert(`Error: ${error.message}`);
     } finally {
       setUnsuspendLoading(false);
+    }
+  };
+
+  // Handle delete user
+  const handleDeleteUser = (user) => {
+    setDeleteModal({ open: true, user });
+    setDeleteConfirmName('');
+  };
+
+  const submitDeleteUser = async () => {
+    if (!deleteModal.user) return;
+    if (deleteConfirmName !== deleteModal.user.full_name) {
+      alert('Please type the user\'s full name exactly to confirm deletion.');
+      return;
+    }
+
+    setDeleteLoading(true);
+    try {
+      const response = await authFetch(`${API_ENDPOINTS.ADMIN_USERS}/${deleteModal.user.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || `HTTP ${response.status}`);
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      setDeleteModal({ open: false, user: null });
+      setDeleteConfirmName('');
+      alert(`${deleteModal.user.full_name}'s account has been permanently deleted.`);
+    } catch (error) {
+      console.error('❌ Error deleting user:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -381,7 +306,8 @@ const AdminDashboard = () => {
       }
 
       console.log('✅ Farmer approved');
-      setPendingFarmers(pendingFarmers.filter(f => f.id !== farmerAction.farmer.id));
+      queryClient.invalidateQueries({ queryKey: ['admin-pending-farmers'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       setFarmerAction(null);
       alert(`${farmerAction.farmer.full_name} has been approved`);
     } catch (error) {
@@ -411,7 +337,7 @@ const AdminDashboard = () => {
       }
 
       console.log('✅ Farmer rejected');
-      setPendingFarmers(pendingFarmers.filter(f => f.id !== farmerAction.farmer.id));
+      queryClient.invalidateQueries({ queryKey: ['admin-pending-farmers'] });
       setFarmerAction(null);
       alert(`${farmerAction.farmer.full_name} has been rejected`);
     } catch (error) {
@@ -442,11 +368,7 @@ const AdminDashboard = () => {
 
       const data = await response.json();
       console.log('✅ Admin added:', data);
-      setAllUsers(allUsers.map(u => 
-        u.id === selectedAdminUserId
-          ? { ...u, role: 'admin', approved: true }
-          : u
-      ));
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       setAddAdminModal(false);
       setSelectedAdminUserId('');
       alert(`${selectedAdminUser?.full_name || 'User'} is now an admin`);
@@ -492,40 +414,6 @@ const AdminDashboard = () => {
       setEditLoading(false);
     }
   };
-
-  // Fetch pending farmers from backend
-  React.useEffect(() => {
-    const fetchPendingFarmers = async () => {
-      setLoadingFarmers(true);
-      setFarmerError(null);
-      try {
-        const response = await authFetch(API_ENDPOINTS.ADMIN_PENDING_FARMERS, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch pending farmers');
-        }
-
-        const data = await response.json();
-        console.log('📋 Pending farmers fetched:', data);
-        setPendingFarmers(data.data?.farmers || []);
-      } catch (error) {
-        console.error('❌ Error fetching pending farmers:', error);
-        setFarmerError(error.message);
-      } finally {
-        setLoadingFarmers(false);
-      }
-    };
-
-    // Only fetch if user is admin
-    if (user?.role === 'admin') {
-      fetchPendingFarmers();
-    }
-  }, [user?.role]);
 
   // Export transactions to CSV
   const exportTransactionsCSV = () => {
@@ -681,9 +569,7 @@ const AdminDashboard = () => {
           </div>
           <div className="space-y-4">
             {activityLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--primary-500)] border-t-transparent"></div>
-              </div>
+              <ActivityFeedSkeleton count={4} />
             ) : recentActivity.length === 0 ? (
               <p className="text-center py-8 text-[var(--text-secondary)]">No recent activity</p>
             ) : (
@@ -720,9 +606,7 @@ const AdminDashboard = () => {
           </div>
           <div className="space-y-4">
             {activityLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--primary-500)] border-t-transparent"></div>
-              </div>
+              <ActivityFeedSkeleton count={3} />
             ) : topFarmers.length === 0 ? (
               <p className="text-center py-8 text-[var(--text-secondary)]">No farmer sales data yet</p>
             ) : (
@@ -774,8 +658,8 @@ const AdminDashboard = () => {
       </div>
 
       {loadingUsers ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--primary-600)]"></div>
+        <div className="py-4">
+          <TableSkeleton rows={6} cols={6} />
         </div>
       ) : usersError ? (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
@@ -898,6 +782,18 @@ const AdminDashboard = () => {
                           <FaCheckCircle />
                         </button>
                       )}
+                      {userItem.role !== 'admin' && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteUser(userItem);
+                          }}
+                          className="p-2 text-[var(--text-secondary)] hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete account permanently"
+                        >
+                          <FaTrash />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -926,8 +822,8 @@ const AdminDashboard = () => {
       )}
 
       {loadingFarmers ? (
-        <div className="flex items-center justify-center py-8">
-          <div className="w-8 h-8 border-4 border-[var(--primary-200)] border-t-[var(--primary-500)] rounded-full animate-spin" />
+        <div className="py-4">
+          <TableSkeleton rows={4} cols={5} />
         </div>
       ) : pendingFarmers.length === 0 ? (
         <div className="text-center py-8 text-[var(--text-secondary)]">
@@ -997,8 +893,8 @@ const AdminDashboard = () => {
       </div>
 
       {transactionsLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--primary-600)]"></div>
+        <div className="py-4">
+          <TableSkeleton rows={6} cols={5} />
         </div>
       ) : transactionsError ? (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
@@ -1186,10 +1082,7 @@ const AdminDashboard = () => {
             </div>
 
             {loadingUserDetails ? (
-              <div className="flex flex-col items-center justify-center py-16">
-                <div className="animate-spin rounded-full h-16 w-16 border-4 border-[var(--primary-200)] border-t-[var(--primary-600)] mb-4"></div>
-                <p className="text-[var(--text-secondary)] font-medium">Loading user details...</p>
-              </div>
+              <UserDetailsSkeleton />
             ) : userDetailsError ? (
               <div className="p-6">
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
@@ -1443,6 +1336,104 @@ const AdminDashboard = () => {
                   <>
                     <FaCheckCircle size={16} />
                     Unsuspend User
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  // Delete User Modal
+  const DeleteUserModal = () => (
+    <AnimatePresence>
+      {deleteModal.open && (
+        <motion.div
+          key="delete-modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => { setDeleteModal({ open: false, user: null }); setDeleteConfirmName(''); }}
+        >
+          <motion.div
+            key="delete-modal-content"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-700 to-red-900 text-white p-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-red-500/30 flex items-center justify-center">
+                  <FaTrash size={22} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Delete Account</h2>
+                  <p className="text-sm text-red-200">This action is PERMANENT and cannot be undone</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className="bg-red-50 border border-red-300 rounded-lg p-4">
+                <p className="text-sm text-red-800 font-semibold mb-2">
+                  You are about to permanently delete the account of:
+                </p>
+                <p className="text-lg font-bold text-red-900">{deleteModal.user?.full_name}</p>
+                <p className="text-xs text-red-600 mt-1">{deleteModal.user?.email} &bull; {deleteModal.user?.role}</p>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
+                <p className="text-xs text-yellow-800">
+                  <strong>Warning:</strong> This will permanently remove the user, their products, favorites, reviews, and notifications. Orders will be preserved for records.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  Type <strong className="text-red-700">{deleteModal.user?.full_name}</strong> to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmName}
+                  onChange={(e) => setDeleteConfirmName(e.target.value)}
+                  placeholder="Type full name here..."
+                  className="w-full px-4 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
+              <button
+                onClick={() => { setDeleteModal({ open: false, user: null }); setDeleteConfirmName(''); }}
+                disabled={deleteLoading}
+                className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitDeleteUser}
+                disabled={deleteLoading || deleteConfirmName !== deleteModal.user?.full_name}
+                className="px-6 py-2 bg-red-700 text-white rounded-lg font-bold hover:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {deleteLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <FaTrash size={14} />
+                    Delete Permanently
                   </>
                 )}
               </button>
@@ -1813,6 +1804,7 @@ const AdminDashboard = () => {
       <UserDetailsModal />
       <SuspendUserModal />
       <UnsuspendUserModal />
+      <DeleteUserModal />
       <AddAdminModal />
       <EditProfileModal />
       <FarmerActionModal />

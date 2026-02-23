@@ -1014,6 +1014,107 @@ const unsuspendUser = async (req, res, next) => {
 };
 
 /**
+ * Delete a user account permanently
+ * DELETE /api/admin/users/:id
+ */
+const deleteUser = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    const adminId = req.user.id;
+
+    // Prevent self-deletion
+    if (userId === adminId) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot delete your own account'
+      });
+    }
+
+    // Check if user exists
+    const { data: profile, error: fetchError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, role')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError || !profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Prevent deleting other admins
+    if (profile.role === 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot delete admin accounts. Demote first.'
+      });
+    }
+
+    const userName = profile.full_name;
+
+    // 1. Delete user's products (if farmer)
+    if (profile.role === 'farmer') {
+      await supabaseAdmin
+        .from('products')
+        .delete()
+        .eq('farmer_id', userId);
+      console.log('🗑️ Deleted products for farmer:', userId);
+    }
+
+    // 2. Delete user's favorites
+    await supabaseAdmin
+      .from('favorites')
+      .delete()
+      .eq('customer_id', userId);
+
+    // 3. Delete user's reviews
+    await supabaseAdmin
+      .from('reviews')
+      .delete()
+      .eq('customer_id', userId);
+
+    // 4. Delete user's notifications
+    await supabaseAdmin
+      .from('notifications')
+      .delete()
+      .eq('user_id', userId);
+
+    // 5. Delete profile
+    const { error: deleteProfileError } = await supabaseAdmin
+      .from('profiles')
+      .delete()
+      .eq('id', userId);
+
+    if (deleteProfileError) {
+      console.error('❌ Error deleting profile:', deleteProfileError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete user profile',
+        error: deleteProfileError.message
+      });
+    }
+
+    // 6. Delete from Supabase Auth
+    try {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      console.log('✅ User deleted from Supabase Auth:', userId);
+    } catch (authDeleteError) {
+      console.error('⚠️ Failed to delete user from Supabase Auth:', authDeleteError);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `${userName}'s account has been permanently deleted`
+    });
+  } catch (error) {
+    console.error('❌ deleteUser error:', error);
+    next(error);
+  }
+};
+
+/**
  * Get all platform transactions (orders with payment info)
  * GET /api/admin/transactions
  */
@@ -1183,6 +1284,7 @@ module.exports = {
   suspendUser,
   unsuspendUser,
   getTransactions,
-  getTopFarmers
+  getTopFarmers,
+  deleteUser
 };
 

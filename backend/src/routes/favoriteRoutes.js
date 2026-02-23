@@ -5,13 +5,12 @@ const {
   removeFavorite,
   checkFavorite
 } = require('../controllers/favoriteController');
-const { authenticate, authorizeRole } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-// All routes require customer authentication
+// All routes require authentication (any role can have favorites)
 router.use(authenticate);
-router.use(authorizeRole('customer'));
 
 // Add to favorites
 router.post('/', addFavorite);

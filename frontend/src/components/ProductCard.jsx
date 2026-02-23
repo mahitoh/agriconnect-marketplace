@@ -81,7 +81,7 @@ const ProductCard = ({ product, onAddToCart }) => {
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
           onClick={toggleWishlist}
-          className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm transition-all ${isWishlisted
+          className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center shadow-lg backdrop-blur-sm transition-all z-10 ${isWishlisted
             ? 'bg-[var(--error)] text-white'
             : 'bg-white/90 text-[var(--text-secondary)] hover:text-[var(--error)]'
             }`}
@@ -97,7 +97,7 @@ const ProductCard = ({ product, onAddToCart }) => {
         </motion.button>
 
         {/* Overlay on Hover */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
       </div>
 
       {/* Product Info */}

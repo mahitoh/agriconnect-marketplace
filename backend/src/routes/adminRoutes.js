@@ -15,6 +15,7 @@ const {
   suspendUser,
   unsuspendUser,
   promoteUserToAdmin,
+  deleteUser,
   getTransactions,
   getTopFarmers
 } = require('../controllers/adminController');
@@ -107,6 +108,12 @@ router.patch('/users/:id/unsuspend', unsuspendUser);
  * Promote a user to admin
  */
 router.patch('/users/:id/promote', promoteUserToAdmin);
+
+/**
+ * DELETE /api/admin/users/:id
+ * Permanently delete a user account
+ */
+router.delete('/users/:id', deleteUser);
 
 /**
  * GET /api/admin/transactions

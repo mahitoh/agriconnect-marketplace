@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   FaShoppingBasket,
   FaBoxOpen,
@@ -35,10 +36,22 @@ import {
 import Navbar from '../../components/layout/Navbar';
 import Footer from '../../components/layout/Footer';
 import Input from '../../components/ui/input';
+import { TableSkeleton, OrdersListSkeleton, InventorySkeleton, NotificationsSkeleton, ProfileFormSkeleton } from '../../components/ui/skeleton';
 import { useAuth } from '../../context/AuthContext';
 import { API_ENDPOINTS } from '../../config/api';
 import { authFetch } from '../../utils/authFetch';
 import { allCities } from '../../data/cameroonCities';
+import {
+  useFarmerProducts,
+  useFarmerOrders,
+  useFarmerProfile2,
+  useInventorySummary,
+  useNotifications,
+  useAdjustStock,
+  useMarkNotificationRead,
+  useMarkAllNotificationsRead,
+  useDeleteNotification,
+} from '../../hooks/useQueries';
 
 const SECTIONS = {
   DASHBOARD: 'dashboard',
@@ -57,23 +70,69 @@ const FarmerDashboard = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { user, logout, setUser } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  // Product management state
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  // ─── React Query hooks ──────────────────────────────────
+  const isAdmin = false; // farmer dashboard
+  const {
+    data: products = [],
+    isLoading: loading,
+    error: productsError,
+    refetch: refetchProducts,
+  } = useFarmerProducts(!!user);
+
+  const {
+    data: farmerOrders = [],
+    isLoading: ordersLoading,
+    refetch: refetchOrders,
+  } = useFarmerOrders(!!user);
+
+  const {
+    data: profileData,
+    isLoading: profileQueryLoading,
+    refetch: refetchProfile,
+  } = useFarmerProfile2(!!user);
+
+  const {
+    data: inventoryData,
+    isLoading: inventoryLoading,
+  } = useInventorySummary(!!user && activeSection === SECTIONS.INVENTORY);
+
+  const {
+    data: notifData,
+    isLoading: notificationsLoading,
+  } = useNotifications(!!user && activeSection === SECTIONS.NOTIFICATIONS);
+
+  const adjustStockMutation = useAdjustStock();
+  const markReadMutation = useMarkNotificationRead();
+  const markAllReadMutation = useMarkAllNotificationsRead();
+  const deleteNotifMutation = useDeleteNotification();
+
+  // Derived data from queries
+  const inventorySummary = inventoryData?.summary || null;
+  const stockHistory = inventoryData?.stockHistory || [];
+  const notifications = notifData?.notifications || [];
+  const unreadCount = notifData?.unreadCount || 0;
+
+  // Dashboard stats derived from orders + products
+  const dashboardStats = React.useMemo(() => {
+    const totalRevenue = farmerOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+    const totalOrders = farmerOrders.length;
+    const completedOrders = farmerOrders.filter(o => o.status === 'completed' || o.status === 'delivered').length;
+    const fulfillmentRate = totalOrders > 0 ? ((completedOrders / totalOrders) * 100).toFixed(1) : 0;
+    return {
+      totalRevenue,
+      totalOrders,
+      activeProducts: products.length,
+      fulfillmentRate: `${fulfillmentRate}%`,
+    };
+  }, [farmerOrders, products]);
+
+  // Error/success message state (for mutations)
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
-
-  // Orders and dashboard state
-  const [farmerOrders, setFarmerOrders] = useState([]);
-  const [dashboardStats, setDashboardStats] = useState({
-    totalRevenue: 0,
-    totalOrders: 0,
-    activeProducts: 0,
-    fulfillmentRate: '0%'
-  });
-  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Product form state
   const [productForm, setProductForm] = useState({
@@ -103,25 +162,17 @@ const FarmerDashboard = () => {
     avatarUrl: '',
     bannerUrl: ''
   });
+  // Profile loading state (for save operations)
   const [profileLoading, setProfileLoading] = useState(false);
   const [avatarFile, setAvatarFile] = useState(null);
   const [bannerFile, setBannerFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [bannerPreview, setBannerPreview] = useState(null);
 
-  // Inventory state
-  const [inventorySummary, setInventorySummary] = useState(null);
-  const [inventoryLoading, setInventoryLoading] = useState(false);
-  const [stockHistory, setStockHistory] = useState([]);
+  // Inventory modal state
   const [adjustModal, setAdjustModal] = useState({ isOpen: false, product: null });
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustNotes, setAdjustNotes] = useState('');
-  const [adjusting, setAdjusting] = useState(false);
-
-  // Notifications state
-  const [notifications, setNotifications] = useState([]);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
 
   // Support state
   const [supportForm, setSupportForm] = useState({ subject: '', message: '' });
@@ -142,158 +193,63 @@ const FarmerDashboard = () => {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const cropperRef = useRef(null);
 
-  // Fetch products and orders on mount and when section changes
+  // Sync profile data from React Query into form state
   useEffect(() => {
-    if (activeSection === SECTIONS.PRODUCTS || activeSection === SECTIONS.DASHBOARD) {
-      fetchProducts();
-    }
-    if (activeSection === SECTIONS.DASHBOARD || activeSection === SECTIONS.ORDERS) {
-      fetchFarmerOrders();
-    }
-    if (activeSection === SECTIONS.PROFILE) {
-      fetchProfile();
-    }
-    if (activeSection === SECTIONS.INVENTORY) {
-      fetchInventory();
-    }
-    if (activeSection === SECTIONS.NOTIFICATIONS) {
-      fetchNotifications();
-    }
-  }, [activeSection]);
-
-  // Update dashboard stats when products change
-  useEffect(() => {
-    setDashboardStats(prev => ({
-      ...prev,
-      activeProducts: products.length
-    }));
-  }, [products]);
-
-  // Also fetch profile on initial mount to have data ready
-  useEffect(() => {
-    if (user) {
-      fetchProfile();
-    }
-  }, [user]);
-
-  // Set initial form data from user context as fallback
-  useEffect(() => {
-    if (user && !profileForm.fullName) {
-      console.log('🔄 Setting initial profile form from user context:', user);
+    if (profileData) {
+      setProfileForm({
+        fullName: profileData.full_name || user?.full_name || '',
+        email: user?.email || '',
+        phone: profileData.phone || '',
+        location: profileData.location || '',
+        bio: profileData.bio || '',
+        farmDetails: profileData.farm_details || '',
+        farmName: profileData.farm_name || '',
+        yearsExperience: profileData.years_experience || '',
+        certifications: Array.isArray(profileData.certifications) ? profileData.certifications : [],
+        avatarUrl: profileData.avatar_url || '',
+        bannerUrl: profileData.banner_url || ''
+      });
+      if (profileData.avatar_url?.startsWith('http')) setAvatarPreview(profileData.avatar_url);
+      if (profileData.banner_url?.startsWith('http')) setBannerPreview(profileData.banner_url);
+    } else if (user && !profileData) {
       setProfileForm(prev => ({
         ...prev,
         fullName: user.full_name || '',
         email: user.email || ''
       }));
     }
-  }, [user]);
+  }, [profileData, user]);
 
-  // Fetch inventory summary
-  const fetchInventory = async () => {
-    setInventoryLoading(true);
-    try {
-      const [summaryRes, historyRes] = await Promise.all([
-        authFetch(API_ENDPOINTS.INVENTORY_SUMMARY),
-        authFetch(API_ENDPOINTS.INVENTORY_HISTORY)
-      ]);
-      const summaryData = await summaryRes.json();
-      const historyData = await historyRes.json();
-      if (summaryData) setInventorySummary(summaryData);
-      if (historyData?.history) setStockHistory(historyData.history);
-    } catch (err) {
-      console.error('Inventory fetch error:', err);
-    } finally {
-      setInventoryLoading(false);
-    }
-  };
-
+  // Mutation-based handlers (replace old fetch-based ones)
   const handleAdjustStock = async (e) => {
     e.preventDefault();
     if (!adjustModal.product || !adjustAmount) return;
-    setAdjusting(true);
     try {
-      const res = await authFetch(API_ENDPOINTS.INVENTORY_ADJUST(adjustModal.product.id), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          quantityChange: parseInt(adjustAmount),
-          notes: adjustNotes || 'Manual adjustment'
-        })
+      const data = await adjustStockMutation.mutateAsync({
+        productId: adjustModal.product.id,
+        quantityChange: parseInt(adjustAmount),
+        notes: adjustNotes || 'Manual adjustment',
       });
-      const data = await res.json();
-      if (res.ok) {
-        setSuccess(`Stock updated: ${data.product?.name} → ${data.product?.newQuantity} units`);
-        setAdjustModal({ isOpen: false, product: null });
-        setAdjustAmount('');
-        setAdjustNotes('');
-        fetchInventory();
-        fetchProducts();
-      } else {
-        setError(data.error || 'Failed to adjust stock');
-      }
+      setSuccess(`Stock updated: ${data.product?.name} → ${data.product?.newQuantity} units`);
+      setAdjustModal({ isOpen: false, product: null });
+      setAdjustAmount('');
+      setAdjustNotes('');
     } catch (err) {
-      setError('Failed to adjust stock');
-    } finally {
-      setAdjusting(false);
+      setError(err.message || 'Failed to adjust stock');
     }
   };
 
-  // Fetch notifications
-  const fetchNotifications = async () => {
-    setNotificationsLoading(true);
-    try {
-      const [notifRes, countRes] = await Promise.all([
-        authFetch(API_ENDPOINTS.NOTIFICATIONS),
-        authFetch(API_ENDPOINTS.NOTIFICATIONS_UNREAD_COUNT)
-      ]);
-      const notifData = await notifRes.json();
-      const countData = await countRes.json();
-      if (notifData?.notifications) setNotifications(notifData.notifications);
-      if (typeof countData?.unreadCount === 'number') setUnreadCount(countData.unreadCount);
-    } catch (err) {
-      console.error('Notifications fetch error:', err);
-    } finally {
-      setNotificationsLoading(false);
-    }
-  };
+  const handleMarkAsRead = (notificationId) => markReadMutation.mutate(notificationId);
+  const handleMarkAllRead = () => markAllReadMutation.mutate();
+  const handleDeleteNotification = (notificationId) => deleteNotifMutation.mutate(notificationId);
 
-  const handleMarkAsRead = async (notificationId) => {
-    try {
-      await authFetch(API_ENDPOINTS.NOTIFICATION_MARK_READ(notificationId), { method: 'PUT' });
-      setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (err) {
-      console.error('Mark as read error:', err);
-    }
-  };
-
-  const handleMarkAllRead = async () => {
-    try {
-      await authFetch(API_ENDPOINTS.NOTIFICATIONS_MARK_ALL_READ, { method: 'PUT' });
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
-    } catch (err) {
-      console.error('Mark all read error:', err);
-    }
-  };
-
-  const handleDeleteNotification = async (notificationId) => {
-    try {
-      await authFetch(API_ENDPOINTS.NOTIFICATION_DELETE(notificationId), { method: 'DELETE' });
-      setNotifications(prev => prev.filter(n => n.id !== notificationId));
-    } catch (err) {
-      console.error('Delete notification error:', err);
-    }
-  };
-
-  // Support ticket submission (uses notifications API to send to admin)
+  // Support ticket submission (local state)
   const handleSupportSubmit = async (e) => {
     e.preventDefault();
     if (!supportForm.subject || !supportForm.message) return;
     setSupportLoading(true);
     setSupportSuccess(null);
     try {
-      // Store ticket locally and show confirmation
       const newTicket = {
         id: `SUP-${Date.now().toString().slice(-4)}`,
         subject: supportForm.subject,
@@ -309,182 +265,6 @@ const FarmerDashboard = () => {
       setError('Failed to submit support request');
     } finally {
       setSupportLoading(false);
-    }
-  };
-
-  // Fetch products from API
-  const fetchProducts = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await authFetch(API_ENDPOINTS.FARMER_PRODUCTS, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch products');
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setProducts(data.data.products || []);
-      }
-    } catch (err) {
-      console.error('Error fetching products:', err);
-      setError('Failed to load products.');
-      setProducts([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch farmer orders from API
-  const fetchFarmerOrders = async () => {
-    setOrdersLoading(true);
-    try {
-      const response = await authFetch(API_ENDPOINTS.FARMER_ORDERS, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch orders');
-      }
-
-      const data = await response.json();
-      if (data.success && data.data?.orders) {
-        const orders = data.data.orders;
-        setFarmerOrders(orders);
-
-        // Calculate dashboard stats from real orders
-        const totalRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-        const totalOrders = orders.length;
-        const completedOrders = orders.filter(o => o.status === 'completed' || o.status === 'delivered').length;
-        const fulfillmentRate = totalOrders > 0 ? ((completedOrders / totalOrders) * 100).toFixed(1) : 0;
-
-        setDashboardStats({
-          totalRevenue,
-          totalOrders,
-          activeProducts: products.length,
-          fulfillmentRate: `${fulfillmentRate}%`
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching orders:', err);
-      setFarmerOrders([]);
-    } finally {
-      setOrdersLoading(false);
-    }
-  };
-
-  // Fetch profile from API
-  const fetchProfile = async () => {
-    setProfileLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.log('⚠️ No token found, using user context data');
-        setProfileForm(prev => ({
-          ...prev,
-          fullName: user?.full_name || '',
-          email: user?.email || '',
-          phone: user?.phone || ''
-        }));
-        setProfileLoading(false);
-        return;
-      }
-
-      const response = await authFetch(API_ENDPOINTS.PROFILE, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      console.log('📡 Profile API response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('📦 Full API response:', data);
-        
-        if (data.success && data.data && data.data.profile) {
-          const profile = data.data.profile;
-          console.log('👤 Profile object:', profile);
-          console.log('📍 full_name:', profile.full_name);
-          console.log('📍 phone:', profile.phone);
-          console.log('📍 location:', profile.location);
-          console.log('📍 bio:', profile.bio);
-          console.log('📍 farm_details:', profile.farm_details);
-          console.log('📍 farm_name:', profile.farm_name);
-          console.log('📍 years_experience:', profile.years_experience);
-          console.log('📍 certifications:', profile.certifications);
-          console.log('📍 avatar_url:', profile.avatar_url);
-          console.log('📍 banner_url:', profile.banner_url);
-          
-          // Build the profile form with all available data
-          const newProfileForm = {
-            fullName: profile.full_name || user?.full_name || '',
-            email: user?.email || '', // Email comes from auth, not profiles table
-            phone: profile.phone || '',
-            location: profile.location || '',
-            bio: profile.bio || '',
-            farmDetails: profile.farm_details || '',
-            farmName: profile.farm_name || '',
-            yearsExperience: profile.years_experience || '',
-            certifications: Array.isArray(profile.certifications) ? profile.certifications : [],
-            avatarUrl: profile.avatar_url || '',
-            bannerUrl: profile.banner_url || ''
-          };
-          
-          console.log('📝 Setting profileForm to:', newProfileForm);
-          setProfileForm(newProfileForm);
-          
-          // Set previews from existing URLs - check for valid URL strings
-          const avatarUrl = profile.avatar_url;
-          const bannerUrl = profile.banner_url;
-          
-          if (avatarUrl && typeof avatarUrl === 'string' && avatarUrl.startsWith('http')) {
-            console.log('🖼️ Setting avatar preview:', avatarUrl);
-            setAvatarPreview(avatarUrl);
-          }
-          if (bannerUrl && typeof bannerUrl === 'string' && bannerUrl.startsWith('http')) {
-            console.log('🖼️ Setting banner preview:', bannerUrl);
-            setBannerPreview(bannerUrl);
-          }
-        } else {
-          console.log('⚠️ Profile data not in expected format:', data);
-          // Set defaults from user context
-          setProfileForm(prev => ({
-            ...prev,
-            fullName: user?.full_name || '',
-            email: user?.email || '',
-            phone: user?.phone || ''
-          }));
-        }
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Profile API error:', response.status, errorData);
-        // If API fails, use user data from auth context
-        setProfileForm(prev => ({
-          ...prev,
-          fullName: user?.full_name || '',
-          email: user?.email || '',
-          phone: user?.phone || ''
-        }));
-      }
-    } catch (err) {
-      console.error('❌ Error fetching profile:', err);
-      // Fallback to user data from auth context
-      setProfileForm(prev => ({
-        ...prev,
-        fullName: user?.full_name || '',
-        email: user?.email || '',
-        phone: user?.phone || ''
-      }));
-    } finally {
-      setProfileLoading(false);
     }
   };
 
@@ -654,7 +434,7 @@ const FarmerDashboard = () => {
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       const productData = {
         name: productForm.name,
@@ -702,7 +482,7 @@ const FarmerDashboard = () => {
       setEditingProduct(null);
 
       // Refresh products list
-      await fetchProducts();
+      queryClient.invalidateQueries({ queryKey: ['farmer', 'products'] });
 
       // Switch to products section after a delay
       setTimeout(() => {
@@ -713,7 +493,7 @@ const FarmerDashboard = () => {
       console.error('Error saving product:', err);
       setError(err.message || 'Failed to save product');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -815,7 +595,7 @@ const FarmerDashboard = () => {
       }
 
       // Refresh profile data to ensure form is in sync with database
-      await fetchProfile();
+      queryClient.invalidateQueries({ queryKey: ['farmer', 'profile'] });
 
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -849,7 +629,7 @@ const FarmerDashboard = () => {
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       const response = await authFetch(API_ENDPOINTS.PRODUCT_BY_ID(productId), {
         method: 'DELETE',
@@ -865,13 +645,13 @@ const FarmerDashboard = () => {
       }
 
       setSuccess('Product deleted successfully!');
-      await fetchProducts();
+      queryClient.invalidateQueries({ queryKey: ['farmer', 'products'] });
       setTimeout(() => setSuccess(null), 2000);
     } catch (err) {
       console.error('Error deleting product:', err);
       setError(err.message || 'Failed to delete product');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -1085,9 +865,8 @@ const FarmerDashboard = () => {
       )}
 
       {loading && products.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary-500)]"></div>
-          <p className="mt-4 text-[var(--text-secondary)]">Loading products...</p>
+        <div className="py-4">
+          <TableSkeleton rows={5} cols={7} />
         </div>
       ) : products.length === 0 ? (
         <div className="text-center py-12">
@@ -1355,9 +1134,8 @@ const FarmerDashboard = () => {
       </div>
 
       {ordersLoading ? (
-        <div className="text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary-500)] mb-4"></div>
-          <p className="text-[var(--text-secondary)]">Loading orders...</p>
+        <div className="py-4">
+          <TableSkeleton rows={5} cols={5} />
         </div>
       ) : farmerOrders.length === 0 ? (
         <div className="text-center py-12">
@@ -1488,9 +1266,8 @@ const FarmerDashboard = () => {
         </div>
 
         {inventoryLoading ? (
-          <div className="text-center py-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary-500)] mb-4"></div>
-            <p className="text-[var(--text-secondary)]">Loading inventory...</p>
+          <div className="py-4">
+            <InventorySkeleton count={4} />
           </div>
         ) : !inventorySummary?.products || inventorySummary.products.length === 0 ? (
           <div className="text-center py-12">
@@ -1629,10 +1406,10 @@ const FarmerDashboard = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={adjusting || !adjustAmount}
+                    disabled={adjustStockMutation.isPending || !adjustAmount}
                     className="flex-1 py-3 bg-[var(--primary-500)] text-white rounded-xl font-bold hover:bg-[var(--primary-600)] disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {adjusting ? (
+                    {adjustStockMutation.isPending ? (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     ) : (
                       <>
@@ -1670,9 +1447,8 @@ const FarmerDashboard = () => {
         </div>
 
         {notificationsLoading ? (
-          <div className="text-center py-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary-500)] mb-4"></div>
-            <p className="text-[var(--text-secondary)]">Loading notifications...</p>
+          <div className="py-4">
+            <NotificationsSkeleton count={4} />
           </div>
         ) : notifications.length === 0 ? (
           <div className="text-center py-12">
@@ -1751,11 +1527,8 @@ const FarmerDashboard = () => {
     // Show loading state while fetching profile
     if (profileLoading && !profileForm.fullName) {
       return (
-        <motion.div {...fadeIn} className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-8">
-          <div className="text-center py-12">
-            <div className="w-12 h-12 border-4 border-[var(--primary-200)] border-t-[var(--primary-500)] rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-[var(--text-secondary)]">Loading your profile...</p>
-          </div>
+        <motion.div {...fadeIn}>
+          <ProfileFormSkeleton />
         </motion.div>
       );
     }

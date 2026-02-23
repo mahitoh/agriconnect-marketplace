@@ -93,7 +93,7 @@ export const FavoritesProvider = ({ children }) => {
     return followedFarmers.some(f => f.id === farmerId);
   };
 
-  // Like/Unlike product (with API)
+  // Like/Unlike product (optimistic update + API)
   const toggleLikeProduct = async (product) => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -101,47 +101,49 @@ export const FavoritesProvider = ({ children }) => {
       return;
     }
 
-    setLoading(true);
     const isLiked = isProductLiked(product.id);
 
+    // Optimistic update — instant UI response
+    if (isLiked) {
+      setLikedProducts(prev => prev.filter(p => p.id !== product.id));
+      showNotification(`Removed ${product.name} from favorites`);
+    } else {
+      setLikedProducts(prev => [...prev, product]);
+      showNotification(`Added ${product.name} to favorites!`);
+    }
+
+    // Fire API in background, rollback on error
     try {
       if (isLiked) {
-        // Remove from favorites
         const response = await authFetch(API_ENDPOINTS.FAVORITES_REMOVE(product.id), {
           method: 'DELETE'
         });
-
-        if (response.ok) {
-          setLikedProducts(prev => prev.filter(p => p.id !== product.id));
-          showNotification(`Removed ${product.name} from favorites`);
-        } else {
-          const data = await response.json();
-          throw new Error(data.message || 'Failed to remove favorite');
+        if (!response.ok) {
+          // Rollback — re-add
+          setLikedProducts(prev => [...prev, product]);
+          showNotification('Failed to remove favorite', 'error');
         }
       } else {
-        // Add to favorites
         const response = await authFetch(API_ENDPOINTS.FAVORITES, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ productId: product.id })
         });
-
-        if (response.ok) {
-          const data = await response.json();
-          setLikedProducts(prev => [...prev, product]);
-          showNotification(`Added ${product.name} to favorites!`);
-        } else {
-          const data = await response.json();
-          throw new Error(data.message || 'Failed to add favorite');
+        if (!response.ok) {
+          // Rollback — remove
+          setLikedProducts(prev => prev.filter(p => p.id !== product.id));
+          showNotification('Failed to add favorite', 'error');
         }
       }
     } catch (error) {
+      // Rollback on network error
+      if (isLiked) {
+        setLikedProducts(prev => [...prev, product]);
+      } else {
+        setLikedProducts(prev => prev.filter(p => p.id !== product.id));
+      }
       console.error('Error toggling product favorite:', error);
-      showNotification(error.message, 'error');
-    } finally {
-      setLoading(false);
+      showNotification('Network error', 'error');
     }
   };
 

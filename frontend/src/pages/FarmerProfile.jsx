@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Layout Components
 import Navbar from '../components/layout/Navbar';
@@ -20,7 +21,10 @@ import {
 // Contexts
 import { useCart } from '../context/CartContext';
 import { useFavorites } from '../context/FavoritesContext';
-import { API_ENDPOINTS } from '../config/api';
+
+// React Query hook
+import { useFarmerProfile } from '../hooks/useQueries';
+import { FarmerProfileSkeleton } from '../components/ui/skeleton';
 
 // Mock data - fallback only
 import { 
@@ -30,94 +34,66 @@ import {
 const FarmerProfile = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('products');
-  const [farmer, setFarmer] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+
+  // Fetch farmer data via React Query
+  const { data: apiData, isLoading: loading, error: queryError } = useFarmerProfile(id);
+
+  // Transform API data
+  const farmer = useMemo(() => {
+    if (!apiData?.farmer) return null;
+    const data = apiData;
+    return {
+      id: data.farmer.id,
+      name: data.farmer.full_name || 'Farmer',
+      farmName: data.farmer.farm_name || data.farmer.farm_details || 'Farm',
+      location: data.farmer.location || 'Location not specified',
+      bio: data.farmer.bio || 'No bio available',
+      verified: data.farmer.approved || false,
+      rating: data.rating?.average_rating?.toFixed(1) || '0.0',
+      totalReviews: data.rating?.total_reviews || 0,
+      totalOrders: 0,
+      memberSince: new Date(data.farmer.created_at).getFullYear(),
+      yearsExperience: data.farmer.years_experience || null,
+      coverImage: data.farmer.banner_url || 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1200&h=400&fit=crop',
+      bannerUrl: data.farmer.banner_url,
+      profileImage: data.farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
+      avatarUrl: data.farmer.avatar_url,
+      avatar: data.farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
+      badges: data.farmer.approved ? ['Verified Farmer'] : ['Pending Approval'],
+      certifications: data.farmer.certifications || [],
+      products: (data.products || []).map(product => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        unit: product.unit || 'kg',
+        image: product.image_url || 'https://images.unsplash.com/photo-1546548970-71785318a17b?w=400&h=400&fit=crop',
+        category: product.category || 'Other',
+        inStock: product.quantity > 0,
+        quantity: product.quantity,
+        description: product.description || '',
+        organic: product.organic_certified || false,
+        harvest: product.harvest_date ? new Date(product.harvest_date).toLocaleDateString() : null
+      })),
+      reviews: (data.recentReviews || []).map(review => ({
+        id: review.id,
+        author: review.profiles?.full_name || 'Anonymous',
+        rating: review.rating,
+        comment: review.comment,
+        date: new Date(review.created_at).toLocaleDateString(),
+        productName: review.products?.name || 'Product'
+      })),
+      specialties: data.farmer.certifications || ['Organic Farming', 'Sustainable'],
+      totalProducts: data.products?.length || 0
+    };
+  }, [apiData]);
+
+  const error = queryError?.message || null;
 
   // Use contexts
   const { addToCart } = useCart();
   const { toggleFollowFarmer, isFollowingFarmer } = useFavorites();
-
-  // Fetch farmer data from API
-  useEffect(() => {
-    const fetchFarmer = async () => {
-      setLoading(true);
-      setError(null);
-      
-      try {
-        console.log('🔍 Fetching farmer profile:', id);
-        const response = await fetch(API_ENDPOINTS.MARKETPLACE_FARMER_PROFILE(id));
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            navigate('/404');
-            return;
-          }
-          throw new Error(`Failed to fetch farmer profile: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('📦 Farmer profile data:', data);
-        
-        // Transform API data to match component structure
-        const transformedFarmer = {
-          id: data.farmer.id,
-          name: data.farmer.full_name || 'Farmer',
-          farmName: data.farmer.farm_name || data.farmer.farm_details || 'Farm',
-          location: data.farmer.location || 'Location not specified',
-          bio: data.farmer.bio || 'No bio available',
-          verified: data.farmer.approved || false,
-          rating: data.rating?.average_rating?.toFixed(1) || '0.0',
-          totalReviews: data.rating?.total_reviews || 0,
-          totalOrders: 0, // TODO: Get from orders data when available
-          memberSince: new Date(data.farmer.created_at).getFullYear(),
-          yearsExperience: data.farmer.years_experience || null,
-          coverImage: data.farmer.banner_url || 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1200&h=400&fit=crop',
-          bannerUrl: data.farmer.banner_url,
-          profileImage: data.farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
-          avatarUrl: data.farmer.avatar_url,
-          avatar: data.farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=200&h=200&fit=crop',
-          badges: data.farmer.approved ? ['Verified Farmer'] : ['Pending Approval'],
-          certifications: data.farmer.certifications || [],
-          products: (data.products || []).map(product => ({
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            unit: product.unit || 'kg',
-            image: product.image_url || 'https://images.unsplash.com/photo-1546548970-71785318a17b?w=400&h=400&fit=crop',
-            category: product.category || 'Other',
-            inStock: product.quantity > 0,
-            quantity: product.quantity,
-            description: product.description || '',
-            organic: product.organic_certified || false,
-            harvest: product.harvest_date ? new Date(product.harvest_date).toLocaleDateString() : null
-          })),
-          reviews: (data.recentReviews || []).map(review => ({
-            id: review.id,
-            author: review.profiles?.full_name || 'Anonymous',
-            rating: review.rating,
-            comment: review.comment,
-            date: new Date(review.created_at).toLocaleDateString(),
-            productName: review.products?.name || 'Product'
-          })),
-          specialties: data.farmer.certifications || ['Organic Farming', 'Sustainable'],
-          totalProducts: data.products?.length || 0
-        };
-        
-        setFarmer(transformedFarmer);
-      } catch (err) {
-        console.error('❌ Error fetching farmer:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (id) {
-      fetchFarmer();
-    }
-  }, [id, navigate]);
 
   // Handlers
   const handleFollow = () => {
@@ -131,34 +107,10 @@ const FarmerProfile = () => {
     alert(`Contact ${farmer?.name} at: contact@${farmer?.farmName?.toLowerCase().replace(/\s/g, '')}.com`);
   };
 
-  // Handle review submission - refresh reviews after submission
+  // Handle review submission - invalidate cache to refresh reviews
   const handleReviewSubmit = async (review) => {
     console.log('Review submitted:', review);
-    // Refetch farmer data to get updated reviews
-    if (id) {
-      try {
-        const response = await fetch(API_ENDPOINTS.MARKETPLACE_FARMER_PROFILE(id));
-        if (response.ok) {
-          const data = await response.json();
-          // Update only the reviews part
-          setFarmer(prev => ({
-            ...prev,
-            reviews: (data.recentReviews || []).map(review => ({
-              id: review.id,
-              author: review.profiles?.full_name || 'Anonymous',
-              rating: review.rating,
-              comment: review.comment,
-              date: new Date(review.created_at).toLocaleDateString(),
-              productName: review.products?.name || 'Product'
-            })),
-            totalReviews: data.rating?.total_reviews || prev.totalReviews,
-            rating: data.rating?.average_rating?.toFixed(1) || prev.rating
-          }));
-        }
-      } catch (err) {
-        console.error('Error refreshing reviews:', err);
-      }
-    }
+    queryClient.invalidateQueries({ queryKey: ['farmer', id] });
   };
 
   const handleAddToCart = (product) => {
@@ -168,29 +120,12 @@ const FarmerProfile = () => {
   // Loading state
   if (loading) {
     return (
-      <div 
-        style={{ 
-          minHeight: '100vh', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          background: '#f9fafb'
-        }}
-      >
-        <div style={{ textAlign: 'center' }}>
-          <div 
-            style={{ 
-              width: '48px', 
-              height: '48px', 
-              border: '4px solid #e5e7eb', 
-              borderTop: '4px solid #2d5f3f', 
-              borderRadius: '50%', 
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto 16px'
-            }} 
-          />
-          <p style={{ color: '#6b7280' }}>Loading farmer profile...</p>
+      <div className="min-h-screen bg-[var(--bg-secondary)]">
+        <Navbar />
+        <div className="pt-20">
+          <FarmerProfileSkeleton />
         </div>
+        <Footer />
       </div>
     );
   }

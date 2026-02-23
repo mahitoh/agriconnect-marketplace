@@ -1,81 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaSearch, FaMapMarkerAlt, FaStar, FaFilter, FaTimes } from 'react-icons/fa';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import FarmerCard from '../components/FarmerCard';
-import { API_ENDPOINTS } from '../config/api';
+import { FarmerGridSkeleton } from '../components/ui/skeleton';
+import { useFarmers } from '../hooks/useQueries';
 
 const Farmers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [minRating, setMinRating] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
-  const [farmers, setFarmers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // Fetch farmers from API
-  useEffect(() => {
-    fetchFarmers();
-  }, []);
+  // Fetch farmers via React Query
+  const { data: rawFarmers = [], isLoading: loading, error: queryError } = useFarmers();
 
-  const fetchFarmers = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(API_ENDPOINTS.MARKETPLACE_FARMERS);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch farmers: ${response.status}`);
-      }
-      
-      const data = await response.json();
+  // Transform API farmers to match FarmerCard format
+  const farmers = useMemo(() => {
+    if (!rawFarmers || rawFarmers.length === 0) return [];
+    return rawFarmers.map(farmer => {
+      const rating = farmer.rating?.average_rating || 0;
+      const reviews = farmer.rating?.total_reviews || 0;
+      const badges = farmer.certifications && farmer.certifications.length > 0 
+        ? farmer.certifications.slice(0, 3)
+        : (farmer.approved ? ['Verified'] : ['Farmer']);
+      const yearsText = farmer.years_experience 
+        ? `${farmer.years_experience}+ years` 
+        : 'Active';
+      return {
+        id: farmer.id,
+        name: farmer.full_name || 'Farmer',
+        farm: farmer.farm_name || farmer.farm_details || 'Farm',
+        location: farmer.location || 'Location not specified',
+        bio: farmer.bio || 'Growing fresh, quality products.',
+        rating: rating.toFixed(1),
+        reviews: reviews.toString(),
+        badges,
+        years: yearsText,
+        products: `${farmer.productCount || 0} products`,
+        image: farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=300&h=350&fit=crop',
+        btnStyle: 'primary'
+      };
+    });
+  }, [rawFarmers]);
 
-      if (data.farmers && Array.isArray(data.farmers) && data.farmers.length > 0) {
-        // Transform API farmers to match FarmerCard format
-        const transformedFarmers = data.farmers.map(farmer => {
-          const rating = farmer.rating?.average_rating || 0;
-          const reviews = farmer.rating?.total_reviews || 0;
-          
-          // Build badges from certifications
-          const badges = farmer.certifications && farmer.certifications.length > 0 
-            ? farmer.certifications.slice(0, 3) // Take first 3 certifications
-            : (farmer.approved ? ['Verified'] : ['Farmer']);
-          
-          // Format years experience
-          const yearsText = farmer.years_experience 
-            ? `${farmer.years_experience}+ years` 
-            : 'Active';
-          
-          return {
-            id: farmer.id,
-            name: farmer.full_name || 'Farmer',
-            farm: farmer.farm_name || farmer.farm_details || 'Farm',
-            location: farmer.location || 'Location not specified',
-            bio: farmer.bio || 'Growing fresh, quality products.',
-            rating: rating.toFixed(1),
-            reviews: reviews.toString(),
-            badges: badges,
-            years: yearsText,
-            products: `${farmer.productCount || 0} products`,
-            image: farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=300&h=350&fit=crop',
-            btnStyle: 'primary'
-          };
-        });
-        setFarmers(transformedFarmers);
-      } else {
-        setFarmers([]);
-        setError('No farmers found in the marketplace.');
-      }
-    } catch (err) {
-      console.error('❌ Error fetching farmers:', err);
-      setFarmers([]);
-      setError(`Unable to load farmers: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const error = queryError ? `Unable to load farmers: ${queryError.message}` : (rawFarmers.length === 0 && !loading ? 'No farmers found in the marketplace.' : null);
 
   // Extract unique locations
   const locations = [...new Set(farmers.map(f => f.location))];
@@ -238,9 +208,8 @@ const Farmers = () => {
 
           {/* Farmers Grid */}
           {loading ? (
-            <div className="text-center py-20">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--primary-500)] mb-4"></div>
-              <p className="text-[var(--text-secondary)]">Loading farmers...</p>
+            <div className="py-8">
+              <FarmerGridSkeleton count={6} />
             </div>
           ) : error ? (
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
