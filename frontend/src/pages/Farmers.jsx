@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaSearch, FaMapMarkerAlt, FaStar, FaFilter, FaTimes } from 'react-icons/fa';
+import { FaSearch, FaMapMarkerAlt, FaStar, FaFilter, FaTimes, FaChevronRight } from 'react-icons/fa';
 import Navbar from '../components/layout/Navbar';
 import Footer from '../components/layout/Footer';
 import FarmerCard from '../components/FarmerCard';
@@ -11,22 +12,20 @@ const Farmers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [minRating, setMinRating] = useState(0);
-  const [showFilters, setShowFilters] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  // Fetch farmers via React Query
   const { data: rawFarmers = [], isLoading: loading, error: queryError } = useFarmers();
 
-  // Transform API farmers to match FarmerCard format
   const farmers = useMemo(() => {
     if (!rawFarmers || rawFarmers.length === 0) return [];
     return rawFarmers.map(farmer => {
       const rating = farmer.rating?.average_rating || 0;
       const reviews = farmer.rating?.total_reviews || 0;
-      const badges = farmer.certifications && farmer.certifications.length > 0 
+      const badges = farmer.certifications && farmer.certifications.length > 0
         ? farmer.certifications.slice(0, 3)
         : (farmer.approved ? ['Verified'] : ['Farmer']);
-      const yearsText = farmer.years_experience 
-        ? `${farmer.years_experience}+ years` 
+      const yearsText = farmer.years_experience
+        ? `${farmer.years_experience}+ years`
         : 'Active';
       return {
         id: farmer.id,
@@ -39,26 +38,30 @@ const Farmers = () => {
         badges,
         years: yearsText,
         products: `${farmer.productCount || 0} products`,
-        image: farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=300&h=350&fit=crop',
+        image: farmer.avatar_url || 'https://images.unsplash.com/photo-1595113316349-9fa4eb24f884?w=400&h=400&fit=crop',
         btnStyle: 'primary'
       };
     });
   }, [rawFarmers]);
 
-  const error = queryError ? `Unable to load farmers: ${queryError.message}` : (rawFarmers.length === 0 && !loading ? 'No farmers found in the marketplace.' : null);
+  const error = queryError
+    ? `Unable to load farmers: ${queryError.message}`
+    : (rawFarmers.length === 0 && !loading ? 'No farmers found in the marketplace.' : null);
 
-  // Extract unique locations
-  const locations = [...new Set(farmers.map(f => f.location))];
+  const locations = [...new Set(farmers.map(f => f.location).filter(Boolean))];
 
-  // Filter farmers
   const filteredFarmers = farmers.filter(farmer => {
-    const matchesSearch = farmer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      farmer.farm.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = !searchQuery.trim() ||
+      farmer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (farmer.farm && farmer.farm.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesLocation = selectedLocations.length === 0 || selectedLocations.includes(farmer.location);
     const matchesRating = parseFloat(farmer.rating) >= minRating;
-
     return matchesSearch && matchesLocation && matchesRating;
   });
+
+  const sortedFarmers = [...filteredFarmers].sort((a, b) =>
+    parseFloat(b.rating) - parseFloat(a.rating)
+  );
 
   const toggleLocation = (location) => {
     setSelectedLocations(prev =>
@@ -70,188 +73,268 @@ const Farmers = () => {
     setSelectedLocations([]);
     setMinRating(0);
     setSearchQuery('');
+    setMobileFiltersOpen(false);
   };
 
+  const hasActiveFilters = selectedLocations.length > 0 || minRating > 0;
+
+  const FiltersSidebar = () => (
+    <div className="bg-white border border-[var(--border-light)] rounded-lg p-4 space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wide">Filters</h3>
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            className="text-xs text-[var(--primary-600)] hover:underline font-medium"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
+
+      <div>
+        <h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide mb-2 flex items-center gap-2">
+          <FaMapMarkerAlt size={12} />
+          Location
+        </h4>
+        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+          {locations.map(location => (
+            <label key={location} className="flex items-center gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={selectedLocations.includes(location)}
+                onChange={() => toggleLocation(location)}
+                className="w-4 h-4 rounded border-[var(--border-color)] text-[var(--primary-500)] focus:ring-1 focus:ring-[var(--primary-500)]"
+              />
+              <span className="text-sm text-[var(--text-primary)] group-hover:text-[var(--primary-600)] truncate">
+                {location}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wide mb-2 flex items-center gap-2">
+          <FaStar size={12} className="text-amber-500" />
+          Minimum Rating
+        </h4>
+        <div className="space-y-1.5">
+          {[4, 3, 2].map(rating => (
+            <label key={rating} className="flex items-center gap-2 cursor-pointer group">
+              <input
+                type="radio"
+                name="minRating"
+                checked={minRating === rating}
+                onChange={() => setMinRating(minRating === rating ? 0 : rating)}
+                className="w-4 h-4 border-[var(--border-color)] text-[var(--primary-500)] focus:ring-1 focus:ring-[var(--primary-500)]"
+              />
+              <span className="text-sm text-[var(--text-primary)] group-hover:text-[var(--primary-600)]">
+                {rating}+ stars
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)]">
+    <div className="min-h-screen bg-[#eaeded]">
       <Navbar />
 
-      <div className="pt-24 pb-20 px-6">
-        <div className="max-w-[1400px] mx-auto">
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-16"
-          >
-            <span className="inline-block px-4 py-2 rounded-full bg-[var(--primary-50)] text-[var(--primary-600)] text-sm font-semibold mb-4">
-              Our Producers
-            </span>
-            <h1 className="text-4xl md:text-5xl font-bold text-[var(--text-primary)] mb-6">
+      <div className="pt-20 pb-12 overflow-x-hidden">
+        <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Breadcrumb */}
+          <nav className="py-3 text-sm text-[var(--text-secondary)]" aria-label="Breadcrumb">
+            <ol className="flex items-center gap-1.5 flex-wrap">
+              <li>
+                <Link to="/" className="hover:text-[var(--primary-600)] underline">Home</Link>
+              </li>
+              <li className="flex items-center gap-1.5">
+                <FaChevronRight className="text-[10px] text-[var(--text-tertiary)]" />
+                <span className="text-[var(--text-primary)] font-medium">Farmers</span>
+              </li>
+            </ol>
+          </nav>
+
+          {/* Header - compact and professional */}
+          <div className="mb-8">
+            <h1 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-1">
               Meet Our Farmers
             </h1>
-            <p className="text-lg text-[var(--text-secondary)] max-w-2xl mx-auto">
-              Connect directly with the dedicated people growing your food.
-              Transparency starts with knowing who produced your meal.
+            <p className="text-sm text-[var(--text-secondary)] max-w-xl">
+              Connect directly with verified producers. Transparency starts with knowing who grows your food.
             </p>
-          </motion.div>
+          </div>
 
-          {/* Search and Filters Bar */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="mb-12"
-          >
-            <div className="bg-white p-4 rounded-2xl shadow-md flex flex-col md:flex-row gap-4 items-center justify-between">
-              {/* Search */}
-              <div className="relative flex-1 w-full">
-                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search farmers by name or farm..."
-                  className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-[var(--border-color)] focus:border-[var(--primary-500)] outline-none transition-all"
-                />
-              </div>
-
-              {/* Filter Toggles */}
-              <div className="flex gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+          {/* Search bar */}
+          <div className="mb-6 w-full">
+            <div className="relative w-full max-w-xl">
+              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name or farm"
+                className="w-full pl-9 pr-9 py-2.5 rounded border border-[var(--border-color)] bg-white text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--primary-500)] focus:ring-1 focus:ring-[var(--primary-500)] outline-none text-sm"
+                aria-label="Search farmers"
+              />
+              {searchQuery && (
                 <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`px-4 py-3 rounded-xl flex items-center gap-2 whitespace-nowrap transition-all ${showFilters
-                      ? 'bg-[var(--primary-500)] text-white'
-                      : 'bg-[var(--neutral-100)] text-[var(--text-primary)] hover:bg-[var(--neutral-200)]'
-                    }`}
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] p-0.5"
+                  aria-label="Clear search"
                 >
-                  <FaFilter />
+                  <FaTimes className="text-sm" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Main: sidebar + content */}
+          <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
+            {/* Left sidebar - desktop */}
+            <aside className="hidden lg:block w-64 flex-shrink-0">
+                <div className="sticky top-24">
+                  <FiltersSidebar />
+                </div>
+              </aside>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0 w-full">
+              {/* Results bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 mb-4">
+                <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
+                  {sortedFarmers.length === 0 && !loading
+                    ? 'No farmers found'
+                    : `${sortedFarmers.length} farmer${sortedFarmers.length !== 1 ? 's' : ''}`}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setMobileFiltersOpen(true)}
+                  className="lg:hidden inline-flex items-center gap-2 px-4 py-3 rounded-lg border border-[var(--border-color)] bg-white text-sm font-medium text-[var(--text-primary)] min-h-[44px] touch-manipulation"
+                >
+                  <FaFilter className="text-xs" />
                   Filters
-                  {(selectedLocations.length > 0 || minRating > 0) && (
-                    <span className="bg-white text-[var(--primary-500)] text-xs font-bold px-2 py-0.5 rounded-full ml-1">
-                      {selectedLocations.length + (minRating > 0 ? 1 : 0)}
-                    </span>
+                  {hasActiveFilters && (
+                    <span className="w-2 h-2 rounded-full bg-[var(--primary-500)]" />
                   )}
                 </button>
               </div>
-            </div>
 
-            {/* Expanded Filters */}
-            <AnimatePresence>
-              {showFilters && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="bg-white mt-4 p-6 rounded-2xl shadow-md border border-[var(--border-light)]">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {/* Location Filter */}
-                      <div>
-                        <h3 className="font-bold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-                          <FaMapMarkerAlt className="text-[var(--primary-500)]" />
-                          Location
-                        </h3>
-                        <div className="flex flex-wrap gap-2">
-                          {locations.map(location => (
-                            <button
-                              key={location}
-                              onClick={() => toggleLocation(location)}
-                              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${selectedLocations.includes(location)
-                                  ? 'bg-[var(--primary-500)] text-white'
-                                  : 'bg-[var(--neutral-100)] text-[var(--text-secondary)] hover:bg-[var(--neutral-200)]'
-                                }`}
-                            >
-                              {location}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Rating Filter */}
-                      <div>
-                        <h3 className="font-bold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-                          <FaStar className="text-[var(--warning)]" />
-                          Minimum Rating
-                        </h3>
-                        <div className="flex gap-2">
-                          {[4, 3, 2, 1].map(rating => (
-                            <button
-                              key={rating}
-                              onClick={() => setMinRating(minRating === rating ? 0 : rating)}
-                              className={`px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all flex items-center gap-1 ${minRating === rating
-                                  ? 'border-[var(--primary-500)] bg-[var(--primary-50)] text-[var(--primary-700)]'
-                                  : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--primary-300)]'
-                                }`}
-                            >
-                              {rating}+ <FaStar className="text-[var(--warning)]" size={12} />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 pt-6 border-t border-[var(--border-light)] flex justify-end">
-                      <button
-                        onClick={clearFilters}
-                        className="text-[var(--primary-500)] hover:text-[var(--primary-600)] font-semibold text-sm"
-                      >
-                        Clear All Filters
+              {/* Active filter chips */}
+              {hasActiveFilters && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {selectedLocations.map(loc => (
+                    <span
+                      key={loc}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--primary-50)] text-[var(--primary-700)] text-xs font-medium"
+                    >
+                      {loc}
+                      <button type="button" onClick={() => toggleLocation(loc)} className="hover:opacity-70" aria-label={`Remove ${loc}`}>
+                        <FaTimes className="text-[10px]" />
                       </button>
-                    </div>
-                  </div>
-                </motion.div>
+                    </span>
+                  ))}
+                  {minRating > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--primary-50)] text-[var(--primary-700)] text-xs font-medium">
+                      {minRating}+ stars
+                      <button type="button" onClick={() => setMinRating(0)} className="hover:opacity-70" aria-label="Clear rating filter">
+                        <FaTimes className="text-[10px]" />
+                      </button>
+                    </span>
+                  )}
+                </div>
               )}
-            </AnimatePresence>
-          </motion.div>
 
-          {/* Farmers Grid */}
-          {loading ? (
-            <div className="py-8">
-              <FarmerGridSkeleton count={6} />
-            </div>
-          ) : error ? (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
-              <p className="text-yellow-700">{error}</p>
-            </div>
-          ) : filteredFarmers.length > 0 ? (
-            <motion.div
-              layout
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-            >
-              <AnimatePresence>
-                {filteredFarmers.map((farmer) => (
-                  <motion.div
-                    key={farmer.id}
-                    layout
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ duration: 0.3 }}
+              {/* Farmers grid */}
+              {loading ? (
+                <div className="py-4">
+                  <FarmerGridSkeleton count={6} />
+                </div>
+              ) : error ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                  <p className="text-amber-800 text-sm">{error}</p>
+                </div>
+              ) : sortedFarmers.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+                  {sortedFarmers.map((farmer) => (
+                    <motion.div
+                      key={farmer.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <FarmerCard farmer={farmer} />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg border border-[var(--border-light)] p-6 sm:p-12 text-center">
+                  <p className="text-5xl mb-4" aria-hidden="true">🌾</p>
+                  <h2 className="text-lg font-bold text-[var(--text-primary)] mb-2">No farmers match your search</h2>
+                  <p className="text-sm text-[var(--text-secondary)] mb-6">
+                    Try adjusting filters or search terms.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="px-5 py-2.5 rounded bg-[var(--primary-500)] text-white text-sm font-medium hover:bg-[var(--primary-600)] transition-colors"
                   >
-                    <FarmerCard farmer={farmer} />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </motion.div>
-          ) : (
-            <div className="text-center py-20">
-              <div className="text-6xl mb-4">🌾</div>
-              <h3 className="text-2xl font-bold text-[var(--text-primary)] mb-2">No farmers found</h3>
-              <p className="text-[var(--text-secondary)] mb-6">
-                Try adjusting your filters or search query
-              </p>
-              <button
-                onClick={clearFilters}
-                className="px-6 py-3 rounded-xl bg-[var(--primary-500)] text-white font-semibold hover:bg-[var(--primary-600)] transition-colors"
-              >
-                Clear Filters
-              </button>
+                    Clear filters
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
+
+      {/* Mobile filters panel */}
+      <AnimatePresence>
+        {mobileFiltersOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+              onClick={() => setMobileFiltersOpen(false)}
+              aria-hidden="true"
+            />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'tween', duration: 0.2 }}
+              className="fixed top-0 left-0 bottom-0 w-[min(320px,85vw)] max-w-full bg-white z-50 shadow-xl overflow-y-auto p-4"
+              aria-label="Filters"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-[var(--text-primary)]">Filters</h2>
+                <button
+                  type="button"
+                  onClick={() => setMobileFiltersOpen(false)}
+                  className="p-2 rounded text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]"
+                  aria-label="Close filters"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+              <FiltersSidebar />
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(false)}
+                className="mt-6 w-full py-3 rounded bg-[var(--primary-500)] text-white font-medium hover:bg-[var(--primary-600)]"
+              >
+                Show results
+              </button>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       <Footer />
     </div>

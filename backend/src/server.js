@@ -22,8 +22,11 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 const app = express();
 
 // Middleware
+const allowedOrigins = process.env.FRONTEND_URL
+  ? [process.env.FRONTEND_URL, 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173']
+  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173'];
 app.use(cors({
-  origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'http://localhost:5173'],
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json());

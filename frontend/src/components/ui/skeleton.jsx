@@ -30,22 +30,42 @@ export const ProductCardSkeleton = () => (
 );
 
 // ─── Product Grid Skeleton ───────────────────────────────────
-export const ProductGridSkeleton = ({ count = 6, viewMode = 'grid' }) => (
-  <div className={`${viewMode === 'grid'
-    ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
-    : 'grid grid-cols-1 gap-6'
-  }`}>
-    {Array.from({ length: count }).map((_, i) => (
-      <ProductCardSkeleton key={i} />
-    ))}
-  </div>
-);
+export const ProductGridSkeleton = ({ count = 6, viewMode = 'grid', compact = false }) => {
+  if (compact) {
+    return (
+      <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5 lg:gap-6">
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} className="bg-white rounded-lg sm:rounded-xl overflow-hidden border border-[var(--border-light)] flex flex-col min-w-0">
+            <Skeleton className="aspect-[4/3] w-full rounded-none shrink-0" />
+            <div className="p-3 sm:p-4 lg:p-5 space-y-2 sm:space-y-3">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-6 w-24 mt-2" />
+              <Skeleton className="h-10 w-full rounded-lg mt-2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className={`${viewMode === 'grid'
+      ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
+      : 'grid grid-cols-1 gap-6'
+    }`}>
+      {Array.from({ length: count }).map((_, i) => (
+        <ProductCardSkeleton key={i} />
+      ))}
+    </div>
+  );
+};
 
 // ─── Farmer Card Skeleton ────────────────────────────────────
 export const FarmerCardSkeleton = () => (
-  <div className="bg-white rounded-2xl overflow-hidden shadow-md border border-[var(--border-light)] h-full flex flex-col">
+  <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-[var(--border-light)] h-full flex flex-col">
     {/* Image */}
-    <Skeleton className="h-64 w-full rounded-none" />
+    <Skeleton className="aspect-[3/2] w-full rounded-none" />
     <div className="p-5 flex flex-col gap-3 flex-1">
       {/* Name */}
       <Skeleton className="h-6 w-3/5" />
@@ -70,7 +90,7 @@ export const FarmerCardSkeleton = () => (
 
 // ─── Farmer Grid Skeleton ────────────────────────────────────
 export const FarmerGridSkeleton = ({ count = 6 }) => (
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
     {Array.from({ length: count }).map((_, i) => (
       <FarmerCardSkeleton key={i} />
     ))}
@@ -79,13 +99,13 @@ export const FarmerGridSkeleton = ({ count = 6 }) => (
 
 // ─── Farmer Profile Skeleton ─────────────────────────────────
 export const FarmerProfileSkeleton = () => (
-  <div className="min-h-screen bg-[var(--bg-secondary)]">
+  <div className="min-h-screen bg-[var(--bg-secondary)] overflow-x-hidden">
     {/* Cover image */}
-    <Skeleton className="w-full h-64 md:h-80 rounded-none" />
-    <div className="max-w-7xl mx-auto px-6 -mt-20">
-      <div className="flex flex-col lg:flex-row gap-8">
+    <Skeleton className="w-full h-48 sm:h-64 md:h-80 rounded-none" />
+    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 -mt-12 sm:-mt-16 md:-mt-20">
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 lg:gap-8">
         {/* Sidebar */}
-        <div className="w-full lg:w-80 flex-shrink-0">
+        <div className="order-2 lg:order-1 w-full">
           <div className="bg-white rounded-2xl shadow-sm border border-[var(--border-light)] p-6 space-y-4">
             <Skeleton className="w-28 h-28 rounded-full mx-auto" />
             <Skeleton className="h-6 w-3/4 mx-auto" />
@@ -100,7 +120,7 @@ export const FarmerProfileSkeleton = () => (
           </div>
         </div>
         {/* Main content */}
-        <div className="flex-1 space-y-6">
+        <div className="order-1 lg:order-2 flex-1 min-w-0 space-y-4 sm:space-y-6">
           {/* Tabs */}
           <div className="flex gap-4">
             <Skeleton className="h-10 w-24 rounded-lg" />
@@ -108,7 +128,7 @@ export const FarmerProfileSkeleton = () => (
             <Skeleton className="h-10 w-24 rounded-lg" />
           </div>
           {/* Product grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
             {Array.from({ length: 4 }).map((_, i) => (
               <ProductCardSkeleton key={i} />
             ))}

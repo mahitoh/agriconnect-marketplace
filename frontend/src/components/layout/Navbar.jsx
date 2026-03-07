@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { GiWheat } from 'react-icons/gi';
-import { FiGlobe, FiShoppingCart, FiMenu, FiX, FiBell, FiUser, FiLogOut, FiHome } from 'react-icons/fi';
+import { FiShoppingCart, FiMenu, FiX, FiBell, FiUser, FiLogOut, FiHome, FiPackage } from 'react-icons/fi';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -81,6 +81,11 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [profileMenuOpen]);
 
+  // Close profile menu when route changes
+  useEffect(() => {
+    setProfileMenuOpen(false);
+  }, [location.pathname]);
+
   const navLinks = [
     { path: '/', label: 'Home' },
     { path: '/marketplace', label: 'Marketplace' },
@@ -99,7 +104,7 @@ const Navbar = () => {
           : 'bg-white shadow-sm'
       }`}
     >
-      <nav className="max-w-[1400px] mx-auto px-6 lg:px-10">
+      <nav className="max-w-[1720px] mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group">
@@ -142,32 +147,21 @@ const Navbar = () => {
           </ul>
 
           {/* Actions */}
-          <div className="flex items-center gap-3">
-            {/* Language Selector */}
+          <div className="flex items-center gap-2">
+            {/* Notifications - badge only when has unread (placeholder: false until implemented) */}
             <button
-              className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--primary-50)] hover:text-[var(--primary-500)] transition-all"
-              type="button"
-              aria-label="Language"
-            >
-              <FiGlobe size={18} />
-              <span>EN</span>
-            </button>
-
-            {/* Notifications */}
-            <button
-              className="hidden md:flex relative p-2.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--primary-50)] hover:text-[var(--primary-500)] transition-all"
+              className="hidden md:flex relative p-2.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--primary-50)] hover:text-[var(--primary-500)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-500)] focus-visible:ring-offset-2"
               type="button"
               aria-label="Notifications"
             >
               <FiBell size={20} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[var(--error)] rounded-full animate-pulse" />
             </button>
 
             {/* Cart */}
             <Link
               to="/cart"
-              className="relative p-2.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--primary-50)] hover:text-[var(--primary-500)] transition-all"
-              aria-label="Shopping Cart"
+              className="relative p-2.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--primary-50)] hover:text-[var(--primary-500)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-500)] focus-visible:ring-offset-2"
+              aria-label={`Shopping Cart${cartCount > 0 ? `, ${cartCount} items` : ''}`}
             >
               <FiShoppingCart size={20} />
               {cartCount > 0 && (
@@ -192,7 +186,7 @@ const Navbar = () => {
                 </Link>
                 <Link
                   to="/register"
-                  className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] hover:from-[var(--primary-600)] hover:to-[var(--primary-700)] shadow-md hover:shadow-lg transition-all"
+                  className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] hover:from-[var(--primary-600)] hover:to-[var(--primary-700)] shadow-md hover:shadow-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-500)] focus-visible:ring-offset-2"
                 >
                   Get Started
                 </Link>
@@ -201,8 +195,10 @@ const Navbar = () => {
               <div className="hidden lg:block profile-menu-container relative">
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="flex items-center gap-2 p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--primary-50)] hover:text-[var(--primary-500)] transition-all"
-                  aria-label="Profile Menu"
+                  className="flex items-center gap-2 p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--primary-50)] hover:text-[var(--primary-500)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-500)] focus-visible:ring-offset-2"
+                  aria-label="Profile menu"
+                  aria-expanded={profileMenuOpen}
+                  aria-haspopup="true"
                 >
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-600)] flex items-center justify-center text-white font-semibold shadow-md overflow-hidden">
                     {user.avatar_url ? (
@@ -240,16 +236,48 @@ const Navbar = () => {
                             navigate(getDashboardRoute());
                             setProfileMenuOpen(false);
                           }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all"
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all"
                         >
                           <FiHome size={16} />
                           <span>
                             {user.role === 'farmer' ? 'My Dashboard' : user.role === 'admin' ? 'Admin Dashboard' : 'My Profile'}
                           </span>
                         </button>
+                        <Link
+                          to="/cart"
+                          onClick={() => setProfileMenuOpen(false)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all"
+                        >
+                          <FiShoppingCart size={16} />
+                          <span>Cart{cartCount > 0 ? ` (${cartCount})` : ''}</span>
+                        </Link>
+                        {user.role === 'customer' && (
+                          <button
+                            onClick={() => {
+                              navigate('/consumer/dashboard');
+                              setProfileMenuOpen(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all"
+                          >
+                            <FiPackage size={16} />
+                            <span>My Orders</span>
+                          </button>
+                        )}
+                        {user.role === 'farmer' && (
+                          <button
+                            onClick={() => {
+                              navigate('/farmer/dashboard');
+                              setProfileMenuOpen(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all"
+                          >
+                            <FiPackage size={16} />
+                            <span>My Products</span>
+                          </button>
+                        )}
                         <button
                           onClick={handleLogout}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--error)] hover:bg-red-50 transition-all"
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left text-[var(--error)] hover:bg-red-50 transition-all"
                         >
                           <FiLogOut size={16} />
                           <span>Logout</span>
@@ -263,9 +291,10 @@ const Navbar = () => {
 
             {/* Mobile Menu Button */}
             <button
-              className="lg:hidden p-2 rounded-lg text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all"
+              className="lg:hidden p-2 rounded-lg text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-500)] focus-visible:ring-offset-2"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle menu"
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <FiX size={24} /> : <FiMenu size={24} />}
             </button>
@@ -297,6 +326,22 @@ const Navbar = () => {
                     {link.label}
                   </Link>
                 ))}
+                <Link
+                  to="/cart"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center justify-between px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
+                    isActive('/cart')
+                      ? 'bg-[var(--primary-50)] text-[var(--primary-500)]'
+                      : 'text-[var(--text-primary)] hover:bg-[var(--neutral-100)]'
+                  }`}
+                >
+                  <span>Cart</span>
+                  {cartCount > 0 && (
+                    <span className="bg-[var(--primary-500)] text-white text-xs font-bold rounded-full px-2 py-0.5">
+                      {cartCount}
+                    </span>
+                  )}
+                </Link>
                 <div className="pt-4 mt-4 border-t border-[var(--border-light)] space-y-2">
                   {!user ? (
                     <>
@@ -338,6 +383,38 @@ const Navbar = () => {
                           {user.role === 'farmer' ? 'My Dashboard' : user.role === 'admin' ? 'Admin Dashboard' : 'My Profile'}
                         </span>
                       </button>
+                      <Link
+                        to="/cart"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold text-left text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all"
+                      >
+                        <FiShoppingCart size={16} />
+                        <span>Cart{cartCount > 0 ? ` (${cartCount})` : ''}</span>
+                      </Link>
+                      {user.role === 'customer' && (
+                        <button
+                          onClick={() => {
+                            navigate('/consumer/dashboard');
+                            setMobileMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all"
+                        >
+                          <FiPackage size={16} />
+                          <span>My Orders</span>
+                        </button>
+                      )}
+                      {user.role === 'farmer' && (
+                        <button
+                          onClick={() => {
+                            navigate('/farmer/dashboard');
+                            setMobileMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--primary-50)] transition-all"
+                        >
+                          <FiPackage size={16} />
+                          <span>My Products</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           handleLogout();

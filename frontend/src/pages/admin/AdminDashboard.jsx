@@ -187,7 +187,7 @@ const AdminDashboard = () => {
       console.log('✅ User suspended:', data);
       
       // Invalidate users cache
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
 
       // Close modal
       setSuspendModal({ open: false, user: null });
@@ -233,7 +233,7 @@ const AdminDashboard = () => {
       console.log('✅ User unsuspended:', data);
       
       // Invalidate users cache
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
 
       // Close modal
       setUnsuspendModal({ open: false, user: null });
@@ -272,8 +272,11 @@ const AdminDashboard = () => {
         throw new Error(errorData.message || `HTTP ${response.status}`);
       }
 
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.setQueryData(['admin', 'users'], (prev = []) =>
+        prev.filter((u) => u.id !== deleteModal.user.id)
+      );
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'dashboard'] });
       setDeleteModal({ open: false, user: null });
       setDeleteConfirmName('');
       alert(`${deleteModal.user.full_name}'s account has been permanently deleted.`);
@@ -306,8 +309,8 @@ const AdminDashboard = () => {
       }
 
       console.log('✅ Farmer approved');
-      queryClient.invalidateQueries({ queryKey: ['admin-pending-farmers'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pendingFarmers'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       setFarmerAction(null);
       alert(`${farmerAction.farmer.full_name} has been approved`);
     } catch (error) {
@@ -337,7 +340,7 @@ const AdminDashboard = () => {
       }
 
       console.log('✅ Farmer rejected');
-      queryClient.invalidateQueries({ queryKey: ['admin-pending-farmers'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pendingFarmers'] });
       setFarmerAction(null);
       alert(`${farmerAction.farmer.full_name} has been rejected`);
     } catch (error) {
@@ -368,7 +371,7 @@ const AdminDashboard = () => {
 
       const data = await response.json();
       console.log('✅ Admin added:', data);
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       setAddAdminModal(false);
       setSelectedAdminUserId('');
       alert(`${selectedAdminUser?.full_name || 'User'} is now an admin`);
@@ -1346,323 +1349,6 @@ const AdminDashboard = () => {
     </AnimatePresence>
   );
 
-  // Delete User Modal
-  const DeleteUserModal = () => (
-    <AnimatePresence>
-      {deleteModal.open && (
-        <motion.div
-          key="delete-modal-overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => { setDeleteModal({ open: false, user: null }); setDeleteConfirmName(''); }}
-        >
-          <motion.div
-            key="delete-modal-content"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-red-700 to-red-900 text-white p-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-red-500/30 flex items-center justify-center">
-                  <FaTrash size={22} />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">Delete Account</h2>
-                  <p className="text-sm text-red-200">This action is PERMANENT and cannot be undone</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-4">
-              <div className="bg-red-50 border border-red-300 rounded-lg p-4">
-                <p className="text-sm text-red-800 font-semibold mb-2">
-                  You are about to permanently delete the account of:
-                </p>
-                <p className="text-lg font-bold text-red-900">{deleteModal.user?.full_name}</p>
-                <p className="text-xs text-red-600 mt-1">{deleteModal.user?.email} &bull; {deleteModal.user?.role}</p>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
-                <p className="text-xs text-yellow-800">
-                  <strong>Warning:</strong> This will permanently remove the user, their products, favorites, reviews, and notifications. Orders will be preserved for records.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-                  Type <strong className="text-red-700">{deleteModal.user?.full_name}</strong> to confirm:
-                </label>
-                <input
-                  type="text"
-                  value={deleteConfirmName}
-                  onChange={(e) => setDeleteConfirmName(e.target.value)}
-                  placeholder="Type full name here..."
-                  className="w-full px-4 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
-              <button
-                onClick={() => { setDeleteModal({ open: false, user: null }); setDeleteConfirmName(''); }}
-                disabled={deleteLoading}
-                className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitDeleteUser}
-                disabled={deleteLoading || deleteConfirmName !== deleteModal.user?.full_name}
-                className="px-6 py-2 bg-red-700 text-white rounded-lg font-bold hover:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {deleteLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <FaTrash size={14} />
-                    Delete Permanently
-                  </>
-                )}
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-
-  // Add Admin Modal
-  const AddAdminModal = () => (
-    <AnimatePresence>
-      {addAdminModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => {
-            setAddAdminModal(false);
-            setSelectedAdminUserId('');
-          }}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-white p-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                  <FaUserShield size={24} />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">Add New Admin</h2>
-                  <p className="text-sm text-[var(--primary-100)]">Grant administrator access</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  Select a user to promote to admin.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
-                  User
-                </label>
-                <select
-                  value={selectedAdminUserId}
-                  onChange={(e) => setSelectedAdminUserId(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm bg-white"
-                >
-                  <option value="">Select user</option>
-                  {adminEligibleUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name || 'Unknown'} • {u.phone || 'No phone'} • {u.role || 'user'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedAdminUser ? (
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--text-secondary)] font-medium">Name:</span>
-                    <span className="font-bold text-[var(--text-primary)]">{selectedAdminUser.full_name || 'Unknown'}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--text-secondary)] font-medium">Role:</span>
-                    <span className="font-bold text-[var(--text-primary)] capitalize">{selectedAdminUser.role || 'customer'}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--text-secondary)] font-medium">Phone:</span>
-                    <span className="font-bold text-[var(--text-primary)]">{selectedAdminUser.phone || 'N/A'}</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-xs text-[var(--text-secondary)]">No user selected</div>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setAddAdminModal(false);
-                  setSelectedAdminUserId('');
-                }}
-                disabled={adminLoading}
-                className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddAdmin}
-                disabled={adminLoading || !selectedAdminUserId}
-                className="px-6 py-2 bg-[var(--primary-500)] text-white rounded-lg font-bold hover:bg-[var(--primary-600)] transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {adminLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Adding...
-                  </>
-                ) : (
-                  <>
-                    <FaUserShield size={16} />
-                    Add Admin
-                  </>
-                )}
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-
-  // Edit Profile Modal
-  const EditProfileModal = () => (
-    <AnimatePresence>
-      {editProfileModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setEditProfileModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-white p-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                  <FaEdit size={24} />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold">Edit Profile</h2>
-                  <p className="text-sm text-[var(--primary-100)]">Update your information</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={editData.full_name}
-                  onChange={(e) => setEditData({...editData, full_name: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={editData.email}
-                  onChange={(e) => setEditData({...editData, email: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={editData.phone}
-                  onChange={(e) => setEditData({...editData, phone: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
-              <button
-                onClick={() => setEditProfileModal(false)}
-                disabled={editLoading}
-                className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEditProfile}
-                disabled={editLoading}
-                className="px-6 py-2 bg-[var(--primary-500)] text-white rounded-lg font-bold hover:bg-[var(--primary-600)] transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {editLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <FaCheckCircle size={16} />
-                    Save Changes
-                  </>
-                )}
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-
   // Farmer Action Modal
   const FarmerActionModal = () => (
     <AnimatePresence>
@@ -1804,14 +1490,387 @@ const AdminDashboard = () => {
       <UserDetailsModal />
       <SuspendUserModal />
       <UnsuspendUserModal />
-      <DeleteUserModal />
-      <AddAdminModal />
-      <EditProfileModal />
+      <DeleteUserModal
+        open={deleteModal.open}
+        user={deleteModal.user}
+        confirmName={deleteConfirmName}
+        loading={deleteLoading}
+        onClose={() => {
+          setDeleteModal({ open: false, user: null });
+          setDeleteConfirmName('');
+        }}
+        onConfirmNameChange={setDeleteConfirmName}
+        onSubmit={submitDeleteUser}
+      />
+      <AddAdminModal
+        open={addAdminModal}
+        loading={adminLoading}
+        selectedAdminUserId={selectedAdminUserId}
+        adminEligibleUsers={adminEligibleUsers}
+        selectedAdminUser={selectedAdminUser}
+        onClose={() => {
+          setAddAdminModal(false);
+          setSelectedAdminUserId('');
+        }}
+        onSelectUser={(value) => setSelectedAdminUserId(value)}
+        onSubmit={handleAddAdmin}
+      />
+      <EditProfileModal
+        open={editProfileModal}
+        loading={editLoading}
+        editData={editData}
+        onClose={() => setEditProfileModal(false)}
+        onChange={(next) => setEditData(next)}
+        onSubmit={handleEditProfile}
+      />
       <FarmerActionModal />
 
       <Footer />
     </div>
   );
 };
+
+const DeleteUserModal = ({
+  open,
+  user,
+  confirmName,
+  loading,
+  onClose,
+  onConfirmNameChange,
+  onSubmit,
+}) => (
+  <AnimatePresence>
+    {open && (
+      <motion.div
+        key="delete-modal-overlay"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          key="delete-modal-content"
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="bg-gradient-to-r from-red-700 to-red-900 text-white p-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-500/30 flex items-center justify-center">
+                <FaTrash size={22} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Delete Account</h2>
+                <p className="text-sm text-red-200">This action is PERMANENT and cannot be undone</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 space-y-5">
+            <div className="flex items-center gap-4 rounded-xl border border-red-200 bg-red-50 p-4">
+              <div className="w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center font-bold">
+                {user?.full_name?.charAt(0) || 'U'}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm text-red-700 font-semibold">You are deleting</p>
+                <p className="text-lg font-bold text-red-900 truncate">{user?.full_name || 'User'}</p>
+                <p className="text-xs text-red-600 truncate">{user?.email} • {user?.role}</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+              <p className="text-xs text-yellow-800">
+                This permanently removes the user profile, products, favorites, reviews, and notifications. Orders remain for records.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-[var(--text-primary)] mb-1">
+                Confirmation
+              </label>
+              <p className="text-xs text-[var(--text-secondary)] mb-2">
+                Type <span className="font-bold text-red-700">{user?.full_name}</span> to enable deletion.
+              </p>
+              <input
+                type="text"
+                value={confirmName}
+                onChange={(e) => onConfirmNameChange(e.target.value)}
+                placeholder="Full name"
+                autoFocus
+                spellCheck={false}
+                className="w-full px-4 py-2.5 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm bg-white"
+              />
+              {confirmName && confirmName !== user?.full_name && (
+                <p className="text-xs text-red-600 mt-2">Name does not match.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onSubmit}
+              disabled={loading || confirmName !== user?.full_name}
+              className="px-6 py-2 bg-red-700 text-white rounded-lg font-bold hover:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <FaTrash size={14} />
+                  Delete Permanently
+                </>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+const AddAdminModal = ({
+  open,
+  loading,
+  selectedAdminUserId,
+  adminEligibleUsers,
+  selectedAdminUser,
+  onClose,
+  onSelectUser,
+  onSubmit,
+}) => (
+  <AnimatePresence>
+    {open && (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-white p-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                <FaUserShield size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Add New Admin</h2>
+                <p className="text-sm text-[var(--primary-100)]">Grant administrator access</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                Select a user to promote to admin.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
+                User
+              </label>
+              <select
+                value={selectedAdminUserId}
+                onChange={(e) => onSelectUser(e.target.value)}
+                className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm bg-white"
+              >
+                <option value="">Select user</option>
+                {adminEligibleUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.full_name || 'Unknown'} • {u.phone || 'No phone'} • {u.role || 'user'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedAdminUser ? (
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--text-secondary)] font-medium">Name:</span>
+                  <span className="font-bold text-[var(--text-primary)]">{selectedAdminUser.full_name || 'Unknown'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--text-secondary)] font-medium">Role:</span>
+                  <span className="font-bold text-[var(--text-primary)] capitalize">{selectedAdminUser.role || 'customer'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--text-secondary)] font-medium">Phone:</span>
+                  <span className="font-bold text-[var(--text-primary)]">{selectedAdminUser.phone || 'N/A'}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-[var(--text-secondary)]">No user selected</div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onSubmit}
+              disabled={loading || !selectedAdminUserId}
+              className="px-6 py-2 bg-[var(--primary-500)] text-white rounded-lg font-bold hover:bg-[var(--primary-600)] transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <FaUserShield size={16} />
+                  Add Admin
+                </>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
+const EditProfileModal = ({
+  open,
+  loading,
+  editData,
+  onClose,
+  onChange,
+  onSubmit,
+}) => (
+  <AnimatePresence>
+    {open && (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-white p-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                <FaEdit size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Edit Profile</h2>
+                <p className="text-sm text-[var(--primary-100)]">Update your information</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={editData.full_name}
+                onChange={(e) => onChange({ ...editData, full_name: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
+                Email
+              </label>
+              <input
+                type="email"
+                value={editData.email}
+                onChange={(e) => onChange({ ...editData, email: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-[var(--text-primary)] mb-2">
+                Phone
+              </label>
+              <input
+                type="tel"
+                value={editData.phone}
+                onChange={(e) => onChange({ ...editData, phone: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-[var(--border-color)] rounded-lg outline-none focus:border-[var(--primary-500)] font-medium text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="bg-gray-50 border-t border-[var(--border-light)] p-4 flex gap-3 justify-end">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 bg-white border border-[var(--border-color)] rounded-lg font-medium text-[var(--text-primary)] hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onSubmit}
+              disabled={loading}
+              className="px-6 py-2 bg-[var(--primary-500)] text-white rounded-lg font-bold hover:bg-[var(--primary-600)] transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <FaCheckCircle size={16} />
+                  Save Changes
+                </>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
 
 export default AdminDashboard;

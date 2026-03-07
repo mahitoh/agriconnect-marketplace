@@ -71,6 +71,7 @@ const FarmerProfile = () => {
         image: product.image_url || 'https://images.unsplash.com/photo-1546548970-71785318a17b?w=400&h=400&fit=crop',
         category: product.category || 'Other',
         inStock: product.quantity > 0,
+        stock: product.quantity ?? 0,
         quantity: product.quantity,
         description: product.description || '',
         organic: product.organic_certified || false,
@@ -103,11 +104,9 @@ const FarmerProfile = () => {
   };
 
   const handleContact = () => {
-    // Navigate to contact or open modal
     alert(`Contact ${farmer?.name} at: contact@${farmer?.farmName?.toLowerCase().replace(/\s/g, '')}.com`);
   };
 
-  // Handle review submission - invalidate cache to refresh reviews
   const handleReviewSubmit = async (review) => {
     console.log('Review submitted:', review);
     queryClient.invalidateQueries({ queryKey: ['farmer', id] });
@@ -120,7 +119,7 @@ const FarmerProfile = () => {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-secondary)]">
+      <div className="min-h-screen bg-[var(--bg-secondary)] overflow-x-hidden">
         <Navbar />
         <div className="pt-20">
           <FarmerProfileSkeleton />
@@ -133,16 +132,16 @@ const FarmerProfile = () => {
   // Error state
   if (error) {
     return (
-      <div className="min-h-screen bg-[var(--bg-secondary)]">
+      <div className="min-h-screen bg-[var(--bg-secondary)] overflow-x-hidden">
         <Navbar />
-        <div className="pt-24 pb-20 px-6">
+        <div className="pt-24 pb-20 px-4 sm:px-6">
           <div className="max-w-2xl mx-auto text-center">
-            <div className="bg-red-50 border border-red-200 rounded-xl p-8">
-              <h2 className="text-2xl font-bold text-red-800 mb-4">Error Loading Farmer Profile</h2>
-              <p className="text-red-600 mb-6">{error}</p>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-6 sm:p-8">
+              <h2 className="text-xl sm:text-2xl font-bold text-red-800 mb-4">Error Loading Farmer Profile</h2>
+              <p className="text-red-600 text-sm sm:text-base mb-6">{error}</p>
               <button
                 onClick={() => navigate('/farmers')}
-                className="px-6 py-3 bg-[var(--primary-500)] text-white rounded-lg font-medium hover:bg-[var(--primary-600)]"
+                className="px-6 py-3 bg-[var(--primary-500)] text-white rounded-lg font-medium hover:bg-[var(--primary-600)] min-h-[44px] touch-manipulation"
               >
                 Back to Farmers
               </button>
@@ -163,17 +162,9 @@ const FarmerProfile = () => {
   const farmerReviews = farmer.reviews || [];
 
   return (
-    <div 
-      style={{ 
-        minHeight: '100vh', 
-        background: '#f9fafb', 
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' 
-      }}
-    >
-      {/* Navbar */}
+    <div className="min-h-screen bg-[#f9fafb] overflow-x-hidden">
       <Navbar />
 
-      {/* Hero Section */}
       <FarmerProfileHero 
         farmer={farmer} 
         onFollow={handleFollow} 
@@ -182,44 +173,25 @@ const FarmerProfile = () => {
       />
 
       {/* Main Content */}
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2rem' }}>
-        <div 
-          style={{ 
-            display: 'grid', 
-            gridTemplateColumns: '280px 1fr', 
-            gap: '2rem' 
-          }}
-        >
-          {/* Sidebar */}
-          <FarmerSidebar farmer={farmer} />
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 lg:gap-8">
+          {/* Sidebar - shows below content on mobile */}
+          <aside className="order-2 lg:order-1 w-full lg:w-auto">
+            <FarmerSidebar farmer={farmer} />
+          </aside>
 
           {/* Main Content Area */}
-          <div>
-            {/* Tabs */}
+          <div className="order-1 lg:order-2 min-w-0">
             <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-            {/* Products Tab */}
             {activeTab === 'products' && (
               <div>
-                <div 
-                  style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    marginBottom: '1.5rem' 
-                  }}
-                >
-                  <h2 style={{ fontSize: '24px', fontWeight: '700' }}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-[var(--text-primary)]">
                     All Products ({products.length})
                   </h2>
                   <select 
-                    style={{ 
-                      padding: '10px 16px', 
-                      border: '1px solid #e5e7eb', 
-                      borderRadius: '10px', 
-                      fontSize: '14px', 
-                      fontWeight: '600' 
-                    }}
+                    className="w-full sm:w-auto min-w-0 max-w-[200px] py-2 sm:py-2.5 pl-3 pr-8 rounded-lg border border-[var(--border-color)] bg-white text-sm font-semibold text-[var(--text-primary)] focus:border-[var(--primary-500)] focus:ring-1 focus:ring-[var(--primary-500)] outline-none"
                   >
                     <option>All Categories</option>
                     <option>Vegetables</option>
@@ -227,13 +199,7 @@ const FarmerProfile = () => {
                   </select>
                 </div>
 
-                <div 
-                  style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: 'repeat(3, 1fr)', 
-                    gap: '1.5rem' 
-                  }}
-                >
+                <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
                   {products.map(product => (
                     <FarmerProductCard 
                       key={product.id} 
@@ -245,15 +211,12 @@ const FarmerProfile = () => {
               </div>
             )}
 
-            {/* About Tab */}
             {activeTab === 'about' && (
               <FarmerAbout farmer={farmer} />
             )}
 
-            {/* Reviews Tab */}
             {activeTab === 'reviews' && (
-              <div>
-                {/* Review Form */}
+              <div className="space-y-4 sm:space-y-6">
                 <ReviewForm 
                   farmerId={farmer.id}
                   farmerName={farmer.name}
@@ -261,30 +224,20 @@ const FarmerProfile = () => {
                   onSubmit={handleReviewSubmit}
                 />
 
-                {/* Rating Summary */}
                 <RatingSummary 
                   rating={farmer.rating} 
                   totalReviews={farmer.totalReviews}
                   distribution={ratingDistribution}
                 />
 
-                {/* Reviews List */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="flex flex-col gap-3 sm:gap-4">
                   {farmerReviews.length > 0 ? (
                     farmerReviews.map(review => (
                       <FarmerReviewCard key={review.id} review={review} />
                     ))
                   ) : (
-                    <div 
-                      style={{ 
-                        textAlign: 'center', 
-                        padding: '40px', 
-                        background: 'white', 
-                        borderRadius: '16px',
-                        color: '#6b7280'
-                      }}
-                    >
-                      <p>No reviews yet. Be the first to review this farmer!</p>
+                    <div className="text-center p-6 sm:p-10 bg-white rounded-xl text-[var(--text-secondary)]">
+                      <p className="text-sm sm:text-base">No reviews yet. Be the first to review this farmer!</p>
                     </div>
                   )}
                 </div>
@@ -294,7 +247,6 @@ const FarmerProfile = () => {
         </div>
       </div>
 
-      {/* Footer */}
       <Footer />
     </div>
   );

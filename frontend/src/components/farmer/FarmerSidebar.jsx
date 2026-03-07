@@ -3,146 +3,75 @@ import { Award, Sprout, Clock, CheckCircle, ShieldCheck } from 'lucide-react';
 
 const FarmerSidebar = ({ farmer }) => {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="flex flex-col gap-4 sm:gap-6">
       {/* Stats Card */}
-      <div 
-        style={{ 
-          background: 'white', 
-          borderRadius: '16px', 
-          padding: '1.5rem', 
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)' 
-        }}
-      >
-        <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '1rem' }}>
+      <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-[var(--border-light)]">
+        <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] mb-3 sm:mb-4">
           Farmer Stats
         </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* Experience */}
+        <div className="flex flex-col gap-3 sm:gap-4">
           <div>
-            <div 
-              style={{ 
-                fontSize: '13px', 
-                color: '#6b7280', 
-                marginBottom: '4px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '6px' 
-              }}
-            >
-              <Award size={14} /> Experience
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm text-[var(--text-secondary)] mb-1">
+              <Award size={14} className="shrink-0" /> Experience
             </div>
-            <div style={{ fontSize: '18px', fontWeight: '700' }}>
-              {farmer.yearsExperience} years
+            <div className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
+              {farmer.yearsExperience ?? '—'} years
             </div>
           </div>
-          
-          <div style={{ height: '1px', background: '#f3f4f6' }} />
-          
-          {/* Products */}
+          <div className="h-px bg-[var(--border-light)]" />
           <div>
-            <div 
-              style={{ 
-                fontSize: '13px', 
-                color: '#6b7280', 
-                marginBottom: '4px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '6px' 
-              }}
-            >
-              <Sprout size={14} /> Products
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm text-[var(--text-secondary)] mb-1">
+              <Sprout size={14} className="shrink-0" /> Products
             </div>
-            <div style={{ fontSize: '18px', fontWeight: '700' }}>
-              {farmer.totalProducts}
+            <div className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
+              {farmer.totalProducts ?? 0}
             </div>
           </div>
-          
-          <div style={{ height: '1px', background: '#f3f4f6' }} />
-          
-          {/* Response Time */}
+          <div className="h-px bg-[var(--border-light)]" />
+          {farmer.responseTime && (
+            <>
+              <div>
+                <div className="flex items-center gap-1.5 text-xs sm:text-sm text-[var(--text-secondary)] mb-1">
+                  <Clock size={14} className="shrink-0" /> Response Time
+                </div>
+                <div className="text-base sm:text-lg font-bold text-[var(--success)]">
+                  {farmer.responseTime}
+                </div>
+              </div>
+              <div className="h-px bg-[var(--border-light)]" />
+            </>
+          )}
           <div>
-            <div 
-              style={{ 
-                fontSize: '13px', 
-                color: '#6b7280', 
-                marginBottom: '4px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '6px' 
-              }}
-            >
-              <Clock size={14} /> Response Time
-            </div>
-            <div style={{ fontSize: '18px', fontWeight: '700', color: '#059669' }}>
-              {farmer.responseTime}
-            </div>
-          </div>
-          
-          <div style={{ height: '1px', background: '#f3f4f6' }} />
-          
-          {/* Member Since */}
-          <div>
-            <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
-              Member Since
-            </div>
-            <div style={{ fontSize: '16px', fontWeight: '600' }}>
-              {farmer.memberSince}
+            <div className="text-xs sm:text-sm text-[var(--text-secondary)] mb-1">Member Since</div>
+            <div className="text-sm sm:text-base font-semibold text-[var(--text-primary)]">
+              {farmer.memberSince ?? '—'}
             </div>
           </div>
         </div>
       </div>
 
       {/* Certifications */}
-      <div 
-        style={{ 
-          background: 'white', 
-          borderRadius: '16px', 
-          padding: '1.5rem', 
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)' 
-        }}
-      >
-        <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '1rem' }}>
-          Certifications
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {farmer.certifications.map((cert, i) => (
-            <div 
-              key={i} 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
-                fontSize: '13px', 
-                color: '#059669' 
-              }}
-            >
-              <CheckCircle size={14} />
-              <span>{cert}</span>
-            </div>
-          ))}
+      {farmer.certifications && farmer.certifications.length > 0 && (
+        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-[var(--border-light)]">
+          <h3 className="text-sm sm:text-base font-bold text-[var(--text-primary)] mb-3 sm:mb-4">
+            Certifications
+          </h3>
+          <div className="flex flex-col gap-2.5">
+            {farmer.certifications.map((cert, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs sm:text-sm text-[var(--primary-600)]">
+                <CheckCircle size={14} className="shrink-0" />
+                <span className="truncate">{cert}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Trust Badge */}
-      <div 
-        style={{ 
-          background: 'linear-gradient(135deg, #2d5f3f, #3d7f5f)', 
-          borderRadius: '16px', 
-          padding: '1.5rem', 
-          color: 'white', 
-          textAlign: 'center', 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center' 
-        }}
-      >
-        <ShieldCheck size={32} style={{ marginBottom: '8px' }} />
-        <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>
-          Verified Farmer
-        </div>
-        <div style={{ fontSize: '12px', opacity: 0.9 }}>
-          Identity & farm verified by AgriConnect
-        </div>
+      <div className="bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-700)] rounded-xl p-4 sm:p-6 text-white text-center flex flex-col items-center">
+        <ShieldCheck size={28} className="sm:w-8 sm:h-8 mb-2 shrink-0" />
+        <div className="text-xs sm:text-sm font-bold mb-1">Verified Farmer</div>
+        <div className="text-[10px] sm:text-xs opacity-90">Identity & farm verified by AgriConnect</div>
       </div>
     </div>
   );
